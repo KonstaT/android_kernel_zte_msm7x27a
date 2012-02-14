@@ -694,7 +694,7 @@ static int mipi_get_manufacture_icid(struct msm_fb_data_type *mfd)
 		mipi_dsi_buf_init(&lead_rx_buf);
 		mipi_set_tx_power_mode(1);	
 		
-		mipi_dsi_cmds_tx(mfd, &lead_tx_buf, mipi_manufacture_icid[i].readid_tx,mipi_manufacture_icid[i].readid_len_tx);
+		mipi_dsi_cmds_tx(&lead_tx_buf, mipi_manufacture_icid[i].readid_tx,mipi_manufacture_icid[i].readid_len_tx);
 		mipi_dsi_cmd_bta_sw_trigger(); 
 		
 		if(!mipi_manufacture_icid[i].mode)
@@ -872,7 +872,7 @@ static int mipi_lcd_off(struct platform_device *pdev)
 		return -EINVAL;
 	mipi_set_tx_power_mode(1);
 
-	mipi_dsi_cmds_tx(mfd, &lead_tx_buf, display_off_cmds,
+	mipi_dsi_cmds_tx(&lead_tx_buf, display_off_cmds,
 			ARRAY_SIZE(display_off_cmds));
 	gpio_direction_output(GPIO_LCD_RESET,0);
 	msleep(5);
@@ -1035,45 +1035,45 @@ static int mipi_lcd_on(struct platform_device *pdev)
 	mipi_set_tx_power_mode(1);
 	switch(LcdPanleID){
 		case (u32)LCD_PANEL_4P0_HX8363_CMI_YASSY:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, hx8363_yassy_display_on_cmds,ARRAY_SIZE(hx8363_yassy_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, hx8363_yassy_display_on_cmds,ARRAY_SIZE(hx8363_yassy_display_on_cmds));
 				printk("HIMAX8363_YASS init ok !!\n");
 				break;
 				
 		case (u32)LCD_PANEL_4P0_HIMAX8369_LEAD:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, hx8369_lead_display_on_cmds,ARRAY_SIZE(hx8369_lead_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, hx8369_lead_display_on_cmds,ARRAY_SIZE(hx8369_lead_display_on_cmds));
 				printk("HIMAX8369_LEAD init ok !!\n");
 				break;
 				
 		case (u32)LCD_PANEL_4P0_HIMAX8369_LEAD_HANNSTAR:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, hx8369_lead_hannstar_display_on_cmds,ARRAY_SIZE(hx8369_lead_hannstar_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, hx8369_lead_hannstar_display_on_cmds,ARRAY_SIZE(hx8369_lead_hannstar_display_on_cmds));
 				printk("HIMAX8369_LEAD_HANNSTAR init ok !!\n");
 				break;
 				
 		case (u32)LCD_PANEL_4P0_HIMAX8369_TIANMA_TN:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, hx8369_tianma_tn_display_on_cmds,ARRAY_SIZE(hx8369_tianma_tn_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, hx8369_tianma_tn_display_on_cmds,ARRAY_SIZE(hx8369_tianma_tn_display_on_cmds));
 				printk("HIMAX8369_TIANMA_TN init ok !!\n");
 				break;
 				
 		case (u32)LCD_PANEL_4P0_HIMAX8369_TIANMA_IPS:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, hx8369_tianma_ips_display_on_cmds,ARRAY_SIZE(hx8369_tianma_ips_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, hx8369_tianma_ips_display_on_cmds,ARRAY_SIZE(hx8369_tianma_ips_display_on_cmds));
 				printk("HIMAX8369_TIANMA_IPS init ok !!\n");
 				break;
 				
 		case (u32)LCD_PANEL_4P0_NT35510_LEAD:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, nt35510_lead_display_on_cmds,ARRAY_SIZE(nt35510_lead_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, nt35510_lead_display_on_cmds,ARRAY_SIZE(nt35510_lead_display_on_cmds));
 				printk("NT35510_LEAD init ok !!\n");
 				break;
 				
 		case (u32)LCD_PANEL_4P0_NT35510_HYDIS_YUSHUN:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, nt3511_yushun_display_on_cmds,ARRAY_SIZE(nt3511_yushun_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, nt3511_yushun_display_on_cmds,ARRAY_SIZE(nt3511_yushun_display_on_cmds));
 				printk("NT35510_HYDIS_YUSHUN init ok !!\n");
 				break;
 		case (u32)LCD_PANEL_4P0_R61408_TRULY_LG:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, r61408_truly_lg_display_on_cmds,ARRAY_SIZE(r61408_truly_lg_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, r61408_truly_lg_display_on_cmds,ARRAY_SIZE(r61408_truly_lg_display_on_cmds));
 				printk("R61408 TRULY LG  init ok !!\n");
 			break;
 		case (u32)LCD_PANEL_4P0_HX8363_IVO_YUSHUN:
-				mipi_dsi_cmds_tx(mfd, &lead_tx_buf, hx8363_yushun_display_on_cmds,ARRAY_SIZE(hx8363_yushun_display_on_cmds));
+				mipi_dsi_cmds_tx(&lead_tx_buf, hx8363_yushun_display_on_cmds,ARRAY_SIZE(hx8363_yushun_display_on_cmds));
 				printk("HIMAX8363_YUSHUN init ok !!\n");
 				break;
 		default:				
