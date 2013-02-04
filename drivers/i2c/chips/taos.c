@@ -258,8 +258,13 @@ static u16 gain_trim_param = 10;
 static u16 gain_trim_param = 25; //this value is set according to specific device
 #endif
 
+#if defined(CONFIG_MACH_ATLAS40)
+static u16 prox_threshold_hi_param = 600;
+static u16 prox_threshold_lo_param = 500;
+#else
 static u16 prox_threshold_hi_param = 1023; 
 static u16 prox_threshold_lo_param = 818;
+#endif
 static u8 prox_int_time_param = 0xF6;
 static u8 prox_adc_time_param = 0xFF;
 static u8 prox_wait_time_param = 0xFF;
@@ -460,7 +465,7 @@ static void do_taos_work(struct work_struct *w)
 	 {           
          if(light_on&&(g_nlux>10000*(taos_cfgp->gain_trim)))
 		 {
-		     printk(KERN_CRIT "TAOS: porx(%d) > hi(%d) when als is %d\n",prox_cur_infop->prox_data,taos_cfgp->prox_threshold_hi,g_nlux);//\C8\E7\B9\FB\BF\B4\B5\BD\D5\E2\B8\F6\B4\F2ӡ\D4\DAǿ\B9\E2\CF\C2Ƶ\B7\B1\B7\A2\C9\FA\A3\AC\BF\C9\D2Կ\BC\C2\C7\CC\F8\B9\FD\CF\C2\C3\E6\B5\C4\E3\D0ֵ\C9\E8\D6ú\CD\CA¼\FE\C9ϱ\A8\A3\AC\B5\AB\D6жϲ\D9\D7\F7\BB\B9Ҫ\D7\F6\A3\AC\C7\D2\D5\E2\C0\EF\BF\C9\C4\DC\D6жϹ\FD\D3\DAƵ\B7\B1\A1\A3Ҳ\BF\C9\D2\D4\C9ϱ\A8һ\B8\F6\B4\ED\CE\F3\A1\A3  
+		     printk(KERN_CRIT "TAOS: porx(%d) > hi(%d) when als is %d\n",prox_cur_infop->prox_data,taos_cfgp->prox_threshold_hi,g_nlux);
 			 goto prox_in_sun;
 		 }
 		
