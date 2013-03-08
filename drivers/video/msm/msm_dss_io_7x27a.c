@@ -410,9 +410,9 @@ void update_lane_config(struct msm_panel_info *pinfo)
 	struct mipi_dsi_phy_ctrl *pd;
 
 	pd = (pinfo->mipi).dsi_phy_db;
-	pinfo->mipi.data_lane1 = FALSE;
+	//pinfo->mipi.data_lane1 = FALSE;
 	pd->pll[10] |= 0x08;
-
+#if 0
 	pinfo->yres = 320;
 	pinfo->lcdc.h_back_porch = 15;
 	pinfo->lcdc.h_front_porch = 21;
@@ -420,5 +420,6 @@ void update_lane_config(struct msm_panel_info *pinfo)
 	pinfo->lcdc.v_back_porch = 50;
 	pinfo->lcdc.v_front_porch = 101;
 	pinfo->lcdc.v_pulse_width = 50;
+#endif
 }
 #endif

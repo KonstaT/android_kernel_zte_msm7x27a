@@ -36,7 +36,9 @@
 #include "mdp4.h"
 
 u32 dsi_irq;
-
+ 
+static int first_time_dsi_on = 1;
+ 
 static boolean tlmm_settings = FALSE;
 
 static int mipi_dsi_probe(struct platform_device *pdev);
@@ -65,6 +67,7 @@ struct device dsi_dev;
 static int mipi_dsi_off(struct platform_device *pdev)
 {
 	int ret = 0;
+	uint32 dsi_a4, dsi_a8;
 	struct msm_fb_data_type *mfd;
 	struct msm_panel_info *pinfo;
 
@@ -113,7 +116,14 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	}
 
 	ret = panel_next_off(pdev);
-
+	dsi_a4 = MIPI_INP(MIPI_DSI_BASE + 0x00a4);
+	pr_err("lht a4 is 0x%x\n",dsi_a4);
+	dsi_a8 = MIPI_INP(MIPI_DSI_BASE + 0x00a8);
+	pr_err("lht a8 is 0x%x\n",dsi_a8);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x00a8, 0x0000001f);
+	mdelay(10);
+	dsi_a4 = MIPI_INP(MIPI_DSI_BASE + 0x00a4);
+	pr_err("lht a4 is 0x%x\n",dsi_a4);
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(0);
 #endif
@@ -149,6 +159,7 @@ static int mipi_dsi_on(struct platform_device *pdev)
 {
 	int ret = 0;
 	u32 clk_rate;
+	uint32 dsi_a4, dsi_a8;
 	struct msm_fb_data_type *mfd;
 	struct fb_info *fbi;
 	struct fb_var_screeninfo *var;
@@ -191,9 +202,14 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 	if (mdp_rev == MDP_REV_42 && mipi_dsi_pdata)
 		target_type = mipi_dsi_pdata->target_type;
-
-	mipi_dsi_phy_init(0, &(mfd->panel_info), target_type);
-
+	if(first_time_dsi_on) 
+	{
+		first_time_dsi_on = 0;
+	}
+	else
+	{
+		mipi_dsi_phy_init(0, &(mfd->panel_info), target_type);
+	}
 	local_bh_disable();
 	mipi_dsi_clk_enable();
 	local_bh_enable();
@@ -253,6 +269,14 @@ static int mipi_dsi_on(struct platform_device *pdev)
 		MIPI_OUTP(MIPI_DSI_BASE + 0x60, data);
 		MIPI_OUTP(MIPI_DSI_BASE + 0x58, data);
 	}
+	dsi_a4 = MIPI_INP(MIPI_DSI_BASE + 0x00a4);
+	pr_err("lht a4 is 0x%x\n",dsi_a4);
+	dsi_a8 = MIPI_INP(MIPI_DSI_BASE + 0x00a8);
+	pr_err("lht a8 is 0x%x\n",dsi_a8);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x00a8, 0x00001f00);
+	mdelay(10);
+	dsi_a4 = MIPI_INP(MIPI_DSI_BASE + 0x00a4);
+	pr_err("lht a4 is 0x%x\n",dsi_a4);
 
 	mipi_dsi_host_init(mipi);
 

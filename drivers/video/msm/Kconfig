@@ -77,6 +77,13 @@ config FB_MSM_MDP40
 	  Say Y here if this is msm7x30 variant platform.
 endchoice
 
+config FB_MSM_GPIO
+        tristate "LED CONFIG_FB_MSM_GPIO Support for different gpio"
+        default n
+        depends on FB_MSM_MIPI_DSI
+        help
+          LIUHAITAO ADD.		  
+
 config FB_MSM_EBI2
 	bool
 	default n
@@ -147,6 +154,11 @@ config FB_MSM_LCDC_PANEL
 	default n
 
 config FB_MSM_MIPI_DSI_TOSHIBA
+	bool
+	select FB_MSM_MIPI_DSI
+	default n
+
+config FB_MSM_MIPI_DSI_LEAD
 	bool
 	select FB_MSM_MIPI_DSI
 	default n
@@ -250,6 +262,11 @@ config FB_MSM_LCDC_WXGA
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
 	bool
 	select FB_MSM_MIPI_DSI_TOSHIBA
+	default n
+
+config FB_MSM_MIPI_LEAD_VIDEO_WVGA_PT
+	bool
+	select FB_MSM_MIPI_DSI_LEAD
 	default n
 
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WSVGA_PT
@@ -412,6 +429,7 @@ config FB_MSM_TRY_MDDI_CATCH_LCDC_PRISM
 config FB_MSM_MIPI_PANEL_DETECT
 	bool "MIPI Panel Detect"
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
+	select FB_MSM_MIPI_LEAD_VIDEO_WVGA_PT
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WSVGA_PT
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WUXGA
 	select FB_MSM_MIPI_RENESAS_VIDEO_FWVGA_PT
@@ -491,6 +509,10 @@ config FB_MSM_MDDI_SHARP_QVGA_128x128
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT_PANEL
 	bool "MIPI Toshiba WVGA PT Panel"
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
+
+config FB_MSM_MIPI_LEAD_VIDEO_WVGA_PT_PANEL
+	bool "MIPI Lead WVGA PT Panel"
+	select FB_MSM_MIPI_LEAD_VIDEO_WVGA_PT
 
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WSVGA_PT_PANEL
 	bool "MIPI Toshiba WSVGA PT Panel"

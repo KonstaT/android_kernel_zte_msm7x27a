@@ -50,6 +50,7 @@ extern uint32 mdp_intr_mask;
 
 int first_pixel_start_x;
 int first_pixel_start_y;
+static bool firstupdate = TRUE;			////LCD_LUYA_20100610_01
 
 int mdp_lcdc_on(struct platform_device *pdev)
 {
@@ -161,7 +162,7 @@ int mdp_lcdc_on(struct platform_device *pdev)
 #endif
 
 	/* starting address */
-	MDP_OUTP(MDP_BASE + dma_base + 0x8, (uint32) buf);
+//	MDP_OUTP(MDP_BASE + dma_base + 0x8, (uint32) buf);
 	/* active window width and height */
 	MDP_OUTP(MDP_BASE + dma_base + 0x4, ((fbi->var.yres) << 16) |
 						(fbi->var.xres));
@@ -345,9 +346,16 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 		dma_base = DMA_E_BASE;
 	}
 #endif
+	if(firstupdate)			/////LCD_LUYA_20100610_01
+	{
+		firstupdate = FALSE;
 
+	}
+	else
+	{
 	/* starting address */
 	MDP_OUTP(MDP_BASE + dma_base + 0x8, (uint32) buf);
+	}
 
 	/* enable LCDC irq */
 	spin_lock_irqsave(&mdp_spin_lock, flag);
