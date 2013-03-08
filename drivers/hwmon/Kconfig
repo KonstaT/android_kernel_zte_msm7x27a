@@ -1387,6 +1387,45 @@ config SENSORS_MC13783_ADC
         help
           Support for the A/D converter on MC13783 PMIC.
 
+config SENSORS_AKM8962C
+	tristate "AKM8962C compass support"
+	default n
+	depends on I2C=y
+	---help---
+	  If you say yes here you get support for Asahi Kasei's
+	  orientation sensor AKM8962C.
+
+config MXC_MMA8452 
+	tristate "MMA8452 device driver" 
+	depends on I2C && SYSFS 
+	default n 
+	---help---
+	  If you say yes here you get support for Freescale
+	  sensor MMA8452.
+
+config MXC_MMA_POSITION 
+	tristate "MMA845x Accelerate Sensor Position Setting" 
+	depends on MXC_MMA8452 
+	default "0" 
+	---help---
+	  this provide the sensor position setting , value is between 0~7 
+
+config SENSORS_KXTIK 
+	tristate "kxtik device driver" 
+	depends on I2C && SYSFS 
+	default n 
+	---help---
+	  If you say yes here you get support for KIONIX
+	  sensor kxtik.
+
+config SENSORS_ST_LIS3DHTR
+	tristate "st accelerator driver" 
+	depends on I2C && SYSFS 
+	default n 
+	---help---
+	  If you say yes here you get support for one of ST's
+	  sensors lis3dhtr.	  
+
 if ACPI
 
 comment "ACPI drivers"

@@ -121,6 +121,10 @@ obj-$(CONFIG_SENSORS_WM8350)	+= wm8350-hwmon.o
 obj-$(CONFIG_SENSORS_WPCE775X)	+= wpce775x.o
 obj-$(CONFIG_SENSORS_MSM_ADC)	+= msm_adc.o m_adcproc.o
 obj-$(CONFIG_SENSORS_PM8XXX_ADC)	+= pm8xxx-adc.o pm8xxx-adc-scale.o
+obj-$(CONFIG_SENSORS_AKM8962C)	+= akm8962.o
+obj-$(CONFIG_MXC_MMA8452)	+= mxc_mma8452.o
+obj-$(CONFIG_SENSORS_KXTIK)	+= kxtik.o
+obj-$(CONFIG_SENSORS_ST_LIS3DHTR)	+= lis3dhtr.o
 
 # PMBus drivers
 obj-$(CONFIG_PMBUS)		+= pmbus_core.o
