@@ -510,6 +510,13 @@ struct axidata {
 int msm_camera_flash_set_led_state(
 	struct msm_camera_sensor_flash_data *fdata,
 	unsigned led_state);
+/*
+ * Commented by YGL_CAM_20100605
+ * Add process for flash LED
+ * Attention: the value of "rc" is ignored by HAL
+ */
+int32_t msm_camera_flash_led_enable(void);
+int32_t msm_camera_flash_led_disable(void);
 int msm_strobe_flash_init(struct msm_sync *sync, uint32_t sftype);
 int msm_flash_ctrl(struct msm_camera_sensor_info *sdata,
 			struct flash_ctrl_data *flash_info);
@@ -533,15 +540,36 @@ static inline int msm_flash_ctrl(
 }
 #endif
 
+/*
+ * Commented by zh.shj
+ * For msm_camera power mode control
+ */
+enum msm_camera_pwr_mode_t {
+    MSM_CAMERA_PWRUP_MODE = 0,
+    MSM_CAMERA_STANDBY_MODE,
+    MSM_CAMERA_NORMAL_MODE,
+    MSM_CAMERA_PWRDWN_MODE,
+    MSM_CAMERA_PWR_MODE_MAX
+};
 
 
 void msm_camvfe_init(void);
 int msm_camvfe_check(void *);
 void msm_camvfe_fn_init(struct msm_camvfe_fn *, void *);
 void msm_camvpe_fn_init(struct msm_camvpe_fn *, void *);
+#if 0
 int msm_camera_drv_start(struct platform_device *dev,
 		int (*sensor_probe)(const struct msm_camera_sensor_info *,
 					struct msm_sensor_ctrl *));
+#else
+int msm_camera_drv_start(struct platform_device *dev,
+		int (*sensor_probe)(const struct msm_camera_sensor_info *,
+					struct msm_sensor_ctrl *),bool bFrontSensor);
+#endif
+
+#if defined(CONFIG_SENSOR_INFO)
+void msm_sensorinfo_set_sensor_id(uint16_t id);
+#endif
 
 enum msm_camio_clk_type {
 	CAMIO_VFE_MDC_CLK,

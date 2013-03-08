@@ -2872,7 +2872,7 @@ static long msm_ioctl_config(struct file *filep, unsigned int cmd,
 			rc = -EFAULT;
 		} else {
 			CDBG("msm_strobe_flash_init enter");
-			rc = msm_strobe_flash_init(pmsm->sync, flash_type);
+			//rc = msm_strobe_flash_init(pmsm->sync, flash_type);
 		}
 		break;
 	}
@@ -2902,8 +2902,9 @@ static long msm_ioctl_config(struct file *filep, unsigned int cmd,
 		if (copy_from_user(&flash_info, argp, sizeof(flash_info))) {
 			ERR_COPY_FROM_USER();
 			rc = -EFAULT;
-		} else
-			rc = msm_flash_ctrl(pmsm->sync->sdata, &flash_info);
+		} 
+		//else
+			//rc = msm_flash_ctrl(pmsm->sync->sdata, &flash_info);
 
 		break;
 	}
@@ -2923,6 +2924,26 @@ static long msm_ioctl_config(struct file *filep, unsigned int cmd,
 		break;
 	}
 
+    /*
+      * Commented by YGL_CAM_20100605 ZTE_CAM_WT_20110221
+      * Added for turning on/off flash LED,
+      * called by vfe_process_QDSP_VFETASK_MSG_VFE_RESET_ACK in HAL
+      */
+	case MSM_CAM_IOCTL_FLASH_LED_ON_OFF_CFG: {
+        uint32_t flashled_switch;
+        if (copy_from_user(&flashled_switch, argp, sizeof(flashled_switch))) {
+            ERR_COPY_FROM_USER();
+            rc = -EFAULT;
+        } else {
+            if (0 == flashled_switch) {
+                rc = msm_camera_flash_led_disable();
+            }
+            else {
+                rc = msm_camera_flash_led_enable();
+            }
+        }
+        break;	
+    }      
 	default:
 		rc = msm_ioctl_common(pmsm, cmd, argp);
 		break;
@@ -4060,7 +4081,7 @@ static int msm_device_init(struct msm_cam_device *pmsm,
 
 	return rc;
 }
-
+#if 0
 int msm_camera_drv_start(struct platform_device *dev,
 		int (*sensor_probe)(const struct msm_camera_sensor_info *,
 			struct msm_sensor_ctrl *))
@@ -4121,4 +4142,74 @@ int msm_camera_drv_start(struct platform_device *dev,
 	list_add(&sync->list, &msm_sensors);
 	return rc;
 }
+#else
+int msm_camera_drv_start(struct platform_device *dev,
+		int (*sensor_probe)(const struct msm_camera_sensor_info *,
+			struct msm_sensor_ctrl *), bool bFrontSensor)
+{
+	struct msm_cam_device *pmsm = NULL;
+	struct msm_sync *sync;
+	int rc = -ENODEV;
+    int i;
+
+    for(i = 0;i < camera_node;i++)
+    {
+        pr_err("lijing:bFrontSensor=%d,camera_type[i]=%d\n",bFrontSensor,camera_type[i]);
+        if(bFrontSensor == camera_type[i]) {
+            return rc;
+		}
+    }
+
+	if (camera_node >= MSM_MAX_CAMERA_SENSORS) {
+		pr_err("%s: too many camera sensors\n", __func__);
+		return rc;
+	}
+
+	if (!msm_class) {
+		/* There are three device nodes per sensor */
+		rc = alloc_chrdev_region(&msm_devno, 0,
+				4 * MSM_MAX_CAMERA_SENSORS,
+				"msm_camera");
+		if (rc < 0) {
+			pr_err("%s: failed to allocate chrdev: %d\n", __func__,
+				rc);
+			return rc;
+		}
+
+		msm_class = class_create(THIS_MODULE, "msm_camera");
+		if (IS_ERR(msm_class)) {
+			rc = PTR_ERR(msm_class);
+			pr_err("%s: create device class failed: %d\n",
+				__func__, rc);
+			return rc;
+		}
+	}
+
+	pmsm = kzalloc(sizeof(struct msm_cam_device) * 4 +
+			sizeof(struct msm_sync), GFP_ATOMIC);
+	if (!pmsm)
+		return -ENOMEM;
+	sync = (struct msm_sync *)(pmsm + 4);
+
+	rc = msm_sync_init(sync, dev, sensor_probe);
+	if (rc < 0) {
+		kfree(pmsm);
+		return rc;
+	}
+
+	CDBG("%s: setting camera node %d\n", __func__, camera_node);
+	rc = msm_device_init(pmsm, sync, camera_node);
+	if (rc < 0) {
+		msm_sync_destroy(sync);
+		kfree(pmsm);
+		return rc;
+	}
+
+	camera_type[camera_node] = sync->sctrl.s_camera_type;
+	sensor_mount_angle[camera_node] = sync->sctrl.s_mount_angle;
+	camera_node++;
+
+	list_add(&sync->list, &msm_sensors);
+	return rc;}
+#endif
 EXPORT_SYMBOL(msm_camera_drv_start);

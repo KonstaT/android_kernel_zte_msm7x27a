@@ -12,6 +12,7 @@ ifeq ($(CONFIG_MSM_CAMERA_V4L2),y)
 else
   obj-$(CONFIG_MSM_CAMERA) += msm_camera.o
 endif
+obj-$(CONFIG_SENSOR_INFO) += msm_sensorinfo.o
 obj-$(CONFIG_MSM_CAMERA) += msm_axi_qos.o gemini/
 obj-$(CONFIG_MSM_CAMERA_FLASH) += flash.o
 obj-$(CONFIG_ARCH_MSM_ARM11) += msm_vfe7x.o msm_io7x.o
@@ -49,8 +50,11 @@ obj-$(CONFIG_VB6801) += vb6801.o
 obj-$(CONFIG_IMX072) += imx072.o imx072_reg.o
 obj-$(CONFIG_WEBCAM_OV7692) += ov7692.o
 obj-$(CONFIG_WEBCAM_OV7692_QRD) += ov7692_qrd.o
-obj-$(CONFIG_OV5640) += ov5640.o
 obj-$(CONFIG_MT9D112) += mt9d112.o mt9d112_reg.o
 
 obj-$(CONFIG_MT9D113) += mt9d113.o mt9d113_reg.o
+obj-$(CONFIG_OV5640_GLOBALOPTICS)  += ov5640.o  ov5640_reg.o
 obj-$(CONFIG_FB_MSM_WRITEBACK_MSM_PANEL) += wfd/
+obj-$(CONFIG_MT9D115)  += mt9d115.o  mt9d115_reg.o
+obj-$(CONFIG_S5K5CAGX_SAMSUNG_FPC)  += s5k5cagx_fpc.o
+obj-$(CONFIG_OV7692)  += ov7692.o  ov7692_reg.o

@@ -37,11 +37,20 @@ config IMX074
 	---help---
 	SONY 13.5 MP Bayer Sensor
 config OV5640
-	bool "Sensor OV5640 (YUV 5M)"
-	depends on MSM_CAMERA && !MSM_CAMERA_V4L2
+	bool "Sensor ov5640 (YUV 5.0M)"
+	depends on MSM_CAMERA && ARCH_MSM7X27A && !MSM_CAMERA_V4L2
 	default n
 	---help---
-	Omni 5M YUV Sensor
+	  OmniVision 5.0M YUV Sensor	
+if OV5640
+config OV5640_GLOBALOPTICS
+	bool "Sensor ov5640 (YUV 5.0M), Module GLOBALOPTICS"
+	depends on MSM_CAMERA
+	default y
+	---help---
+	  OmniVision 5.0M YUV Sensor, Module GLOBALOPTICS
+endif # OV5640
+
 config WEBCAM_OV7692_QRD
 	bool "Sensor OV7692 QRD(VGA YUV)"
 	depends on MSM_CAMERA && ARCH_MSM7X27A && !MSM_CAMERA_V4L2
@@ -53,6 +62,36 @@ config MT9M114
         depends on MSM_CAMERA
         ---help---
         APTINA 1.26 MP yuv Sensor
+config MT9D115
+	bool "Sensor mt9d115 (YUV 2.0M)"
+	depends on MSM_CAMERA && ARCH_MSM7X27A && !MSM_CAMERA_V4L2
+	default n
+	---help---
+	  OmniVision 2.0M YUV Sensor	
+
+
+config S5K5CAGX
+	bool "Sensor s5k5cagx(YUV 3.0M)"
+	depends on MSM_CAMERA && ARCH_MSM7X27A && !MSM_CAMERA_V4L2
+	default n
+	---help---
+	  SAMSUNG 3.0M YUV sensor
+
+if S5K5CAGX
+config S5K5CAGX_SAMSUNG_FPC
+	bool "Sensor s5k5cagx (YUV 3.0M) of fpc, Module SAMSUNG"
+	depends on MSM_CAMERA
+	default y
+	---help---
+	  SAMSUNG 3.0M YUV Sensor, Module SAMSUNG
+endif # S5K5CAGX
+config OV7692
+	bool "Sensor OV7692 (VGA YUV)"
+	depends on MSM_CAMERA && (ARCH_MSM8X60 || ARCH_MSM7X30 || ARCH_MSM7X27A) && !MSM_CAMERA_V4L2
+	default n
+	---help---
+	  Omni Vision VGA YUV Sensor.
+	  
 config WEBCAM_OV7692
 	bool "Sensor OV7692 (VGA YUV)"
 	depends on MSM_CAMERA && ARCH_MSM8X60 && !MSM_CAMERA_V4L2
@@ -182,6 +221,12 @@ config VB6801
 	depends on MSM_CAMERA && !ARCH_MSM8X60 && !MSM_CAMERA_V4L2
 	---help---
 	  5M with flash
+config SENSOR_INFO
+	bool "Get sensor info through EM"
+	depends on MSM_CAMERA && !ARCH_MSM8X60
+	default y
+	---help---
+	  Get sensor id and name through EM (Engineering Mode)
 
 config MSM_CAMERA_FLASH
 	bool "Qualcomm MSM camera flash support"

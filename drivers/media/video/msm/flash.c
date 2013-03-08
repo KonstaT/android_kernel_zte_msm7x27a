@@ -11,6 +11,11 @@
  * GNU General Public License for more details.
  *
  */
+/*-----------------------------------------------------------------------------------------
+  when         who          what, where, why                         comment tag
+  --------     ----        -------------------------------------    ----------------------
+  2010-06-05   ye.ganlin   add process for flash LED                YGL_CAM_20100605
+------------------------------------------------------------------------------------------*/
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/leds-pmic8058.h>
@@ -22,14 +27,55 @@
 #include <mach/camera.h>
 #include <mach/gpio.h>
 
-struct i2c_client *sx150x_client;
+/*
+ * Commented by YGL_CAM_20100605
+ * Add process for flash LED
+ * and for CONFIG_MACH_JOE ONLY
+ */
+#if defined(CONFIG_MSM_CAMERA_FLASH)
+
+/*
+ * Camera Flash LED GPIO setting according to ARM9 AMSS
+ */
+#if defined(CONFIG_MACH_BLADE2) ||defined (CONFIG_MACH_ATLAS40) 
+#define MSM_CAMERA_FLASH_LED_GPIO   (96)
+#else
+#define MSM_CAMERA_FLASH_LED_GPIO   (255)     // illegal value
+#endif
+
+
+/*
+ * Flash LED Status
+ * 1: enable Flash LED
+ * 0: disable Flash LED
+ */
+static uint32_t flash_led_enable = 0;
 struct timer_list timer_flash;
-static struct msm_camera_sensor_info *sensor_data;
+//static struct msm_camera_sensor_info *sensor_data;
 enum msm_cam_flash_stat{
 	MSM_CAM_FLASH_OFF,
 	MSM_CAM_FLASH_ON,
 };
+/*
+ * Flash LED GPIO Setting
+ * 1: pull up GPIO
+ * 0: pull down GPIO
+ */
+ static int32_t msm_camera_flash_set_led_gpio(int32_t gpio_val)
+{
+    int32_t rc = -EFAULT;
 
+
+    rc = gpio_request(MSM_CAMERA_FLASH_LED_GPIO, "flashled-gpio");
+    if (0 == rc)
+    {
+        /* ignore "rc" */
+        rc = gpio_direction_output(MSM_CAMERA_FLASH_LED_GPIO, gpio_val);
+    }
+    gpio_free(MSM_CAMERA_FLASH_LED_GPIO);
+
+    return rc;
+}
 #if defined CONFIG_MSM_CAMERA_FLASH_SC628A
 static struct i2c_client *sc628a_client;
 
@@ -109,6 +155,7 @@ static struct i2c_driver sc628a_i2c_driver = {
 };
 #endif
 
+#if 0
 static int config_flash_gpio_table(enum msm_cam_flash_stat stat,
 			struct msm_camera_sensor_strobe_flash_data *sfdata)
 {
@@ -313,6 +360,121 @@ err1:
 	}
 #endif
 
+	return rc;
+}
+#endif
+/*
+ * Refer to MSM_CAM_IOCTL_FLASH_LED_CFG used by mm-camera in user space
+ * flash_led_enable is set in apps's menu item selected by user
+ * 0: disable Flash LED
+ * 1: enable Flash LED
+ */
+int32_t msm_camera_flash_set_led_state(struct msm_camera_sensor_flash_data *fdata,
+                                                 unsigned led_state)
+{
+    int32_t rc = 0;
+
+    pr_err("%s: led_state: %d\n", __func__, led_state);
+
+	
+    if (fdata->flash_type != MSM_CAMERA_FLASH_LED)
+    {
+		return -ENODEV;
+    }
+	
+    switch(led_state)
+    {
+        case MSM_CAMERA_LED_OFF:
+            flash_led_enable = 0;
+            break;
+
+        case MSM_CAMERA_LED_LOW:
+        case MSM_CAMERA_LED_HIGH:
+            /*
+               * MSM_CAMERA_LED_LOW is as same as MSM_CAMERA_LED_HIGH
+               */
+            CDBG("%s: set MSM_CAMERA_LED_LOW/MSM_CAMERA_LED_HIGH\n", __func__);
+            flash_led_enable = 1;
+            break;
+
+        default:
+            flash_led_enable = 0;
+            rc = -EFAULT;
+            CDBG("%s: rc=%d\n", __func__, rc);
+            return rc;
+    }
+
+    CDBG("%s: rc=%d\n", __func__, rc);
+
+    return rc;
+}
+/*
+ * External Function
+ */
+int32_t msm_camera_flash_led_enable(void)
+{
+    int32_t gpio_val;
+    int32_t rc = 0;
+
+    pr_err("%s: entry: flash_led_enable=%d\n", __func__, flash_led_enable);
+
+    if (flash_led_enable)
+    {
+        gpio_val = 1;
+        rc = msm_camera_flash_set_led_gpio(gpio_val);
+    }
+
+    return rc;
+}
+/*
+ * External Function
+ */
+int32_t msm_camera_flash_led_disable(void)
+{
+
+    int32_t gpio_val;
+    int32_t rc;
+
+    pr_err("%s: entry\n", __func__);
+    gpio_val = 0;
+    rc = msm_camera_flash_set_led_gpio(gpio_val);
+
+    return rc;
+}
+#else
+static int config_flash_gpio_table(enum msm_cam_flash_stat stat,
+			struct msm_camera_sensor_strobe_flash_data *sfdata)
+{
+	int rc = 0, i = 0;
+	int msm_cam_flash_gpio_tbl[][2] = {
+		{sfdata->flash_trigger, 1},
+		{sfdata->flash_charge, 1},
+		{sfdata->flash_charge_done, 0}
+	};
+
+	if (stat == MSM_CAM_FLASH_ON) {
+		for (i = 0; i < ARRAY_SIZE(msm_cam_flash_gpio_tbl); i++) {
+			rc = gpio_request(msm_cam_flash_gpio_tbl[i][0],
+							  "CAM_FLASH_GPIO");
+			if (unlikely(rc < 0)) {
+				pr_err("%s not able to get gpio\n", __func__);
+				for (i--; i >= 0; i--)
+					gpio_free(msm_cam_flash_gpio_tbl[i][0]);
+				break;
+			}
+			if (msm_cam_flash_gpio_tbl[i][1])
+				gpio_direction_output(
+					msm_cam_flash_gpio_tbl[i][0], 0);
+			else
+				gpio_direction_input(
+					msm_cam_flash_gpio_tbl[i][0]);
+		}
+	} else {
+		for (i = 0; i < ARRAY_SIZE(msm_cam_flash_gpio_tbl); i++) {
+			gpio_direction_input(msm_cam_flash_gpio_tbl[i][0]);
+			gpio_free(msm_cam_flash_gpio_tbl[i][0]);
+		}
+	}
 	return rc;
 }
 
@@ -619,3 +781,4 @@ int msm_flash_ctrl(struct msm_camera_sensor_info *sdata,
 	}
 	return rc;
 }
+#endif
