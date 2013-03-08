@@ -817,4 +817,39 @@ config TOUCHSCREEN_CYTTSP_I2C
 
          To compile this driver as a module, choose M here: the
          module will be called cyttsp-i2c.
+
+config TOUCHSCREEN_MXT224
+       tristate "MXT224 based touchscreens"
+       depends on I2C
+       default n
+
+config TOUCHSCREEN_VIRTUAL_KEYS
+       tristate "touchscreens virtual key support"
+       default n
+
+config TOUCHSCREEN_SYNAPTICS
+       tristate "Synaptics i2c touchscreen"
+       depends on I2C
+       help
+         This enables support for Synaptics RMI over I2C based touchscreens.
+
+config TOUCHSCREEN_SYNAPTICS_FW
+       tristate "Synaptics i2c touchscreen firmware UPDATE"
+       depends on I2C
+       help
+         This enables support for Synaptics RMI over I2C based touchscreens.
+
+config TOUCHSCREEN_FOCALTECH
+       tristate "FocalTech touchscreen new"
+       depends on I2C
+       default n
+
+config TOUCHSCREEN_FOCALTECH_FW
+       tristate "FOCALTECH firmware update"
+       default n
+
+config TOUCHSCREEN_FOCALTECH_USBNOTIFY
+       tristate "notify touchscrenn about usb plugin/plugout event"
+       default n
+
 endif
