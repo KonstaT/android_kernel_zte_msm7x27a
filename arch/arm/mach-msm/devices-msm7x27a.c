@@ -219,6 +219,21 @@ struct platform_device msm_device_smd = {
 	.id	= -1,
 };
 
+#ifdef CONFIG_MACH_ATLAS40 // uart3 (ttyMSM0) debug for p740a
+static struct resource resources_uart1[] = {
+	{
+		.start	= INT_UART3,
+		.end	= INT_UART3,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= MSM_UART3_PHYS,
+		.end	= MSM_UART3_PHYS + MSM_UART3_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+#else
 static struct resource resources_uart1[] = {
 	{
 		.start	= INT_UART1,
@@ -231,6 +246,7 @@ static struct resource resources_uart1[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 };
+#endif
 
 struct platform_device msm_device_uart1 = {
 	.name	= "msm_serial",

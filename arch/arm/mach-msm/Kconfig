@@ -390,6 +390,12 @@ config MACH_MSM7X27_FFA
 	help
 	  Support for the Qualcomm MSM7x27 FFA eval board.
 
+config ZTE_PLATFORM
+	bool "ZTE Platform"
+	default y
+	help
+	  Global macro for ZTE code
+
 config MACH_MSM7X27A_RUMI3
         depends on ARCH_MSM7X27A
         depends on !MSM_STACKED_MEMORY
@@ -437,6 +443,15 @@ config MACH_MSM7627A_QRD1
         bool "MSM7627A QRD1"
         help
           Support for the Qualcomm MSM7627A Refrence Design.
+
+# Add ZTE board
+config MACH_ATLAS40
+        depends on ARCH_MSM7X27A
+        depends on !MSM_STACKED_MEMORY
+        default n
+        bool "ZTE ATLAS40"
+        help
+          Support for ZTE MSM7x27A atlas40 phone.
 
 config MACH_MSM7X30_SURF
        depends on ARCH_MSM7X30

@@ -225,13 +225,13 @@ static struct proccomm_regulator_info msm7x27a_pcom_vreg_info[] = {
 	PCOM_VREG_LDO(ldo10, 52, NULL, 1800000, 3000000, 0, -1, 0, 0, 0, 0, p),
 	PCOM_VREG_LDO(ldo11, 53, NULL, 1800000, 1800000, 0, -1, 0, 0, 0, 0, p),
 	PCOM_VREG_LDO(ldo12, 21, NULL, 2850000, 2850000, 0, -1, 0, 0, 0, 0, p),
-	PCOM_VREG_LDO(ldo13, 18, NULL, 2850000, 2850000, 0, -1, 0, 0, 0, 0, p),
+	PCOM_VREG_LDO(ldo13, 18, NULL, 2850000, 2850000, 0, 1, 0, 0, 0, 0, p),       //jzq configure the ldo to pull down
 	PCOM_VREG_LDO(ldo14, 16, NULL, 3300000, 3300000, 0, -1, 0, 0, 0, 0, p),
 	PCOM_VREG_LDO(ldo15, 54, NULL, 1800000, 2850000, 0, -1, 0, 0, 0, 0, p),
 	PCOM_VREG_LDO(ldo16, 19, NULL, 1800000, 2850000, 0, -1, 0, 0, 0, 0, p),
-	PCOM_VREG_LDO(ldo17, 56, NULL, 2900000, 3300000, 0, -1, 0, 0, 0, 0, p),
+	PCOM_VREG_LDO(ldo17, 56, NULL, 2600000, 3300000, 0, -1, 0, 0, 0, 0, p),
 	PCOM_VREG_LDO(ldo18, 11, NULL, 2700000, 2700000, 0, -1, 0, 0, 0, 0, p),
-	PCOM_VREG_LDO(ldo19, 57, NULL, 1200000, 1800000, 0, -1, 0, 0, 0, 0, p),
+	PCOM_VREG_LDO(ldo19, 57, NULL, 1200000, 3050000, 0, -1, 0, 0, 0, 0, p),
 
 	PCOM_VREG_NCP(ncp,   31, NULL, -1800000, -1800000, 0,     0, 0, 0, 0),
 };
