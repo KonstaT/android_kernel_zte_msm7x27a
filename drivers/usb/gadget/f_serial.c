@@ -27,7 +27,7 @@
  * CDC ACM driver.  However, for many purposes it's just as functional
  * if you can arrange appropriate host side drivers.
  */
-#define GSERIAL_NO_PORTS 2
+#define GSERIAL_NO_PORTS 3
 
 struct gser_descs {
 	struct usb_endpoint_descriptor	*in;
@@ -83,6 +83,9 @@ static struct port_info {
 	enum transport_type	transport;
 	unsigned		port_num;
 	unsigned		client_port_num;
+	//xingbeilei
+	int                     enable;
+	//end
 } gserial_ports[GSERIAL_NO_PORTS];
 
 static inline bool is_transport_sdio(enum transport_type t)
@@ -504,6 +507,7 @@ static int gser_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	gport_connect(gser);
 
 	gser->online = 1;
+	gserial_ports[gser->port_num].enable = gser->online;
 	return rc;
 }
 
@@ -521,6 +525,7 @@ static void gser_disable(struct usb_function *f)
 	usb_ep_disable(gser->notify);
 #endif
 	gser->online = 0;
+	gserial_ports[gser->port_num].enable = gser->online;
 }
 #ifdef CONFIG_MODEM_SUPPORT
 static int gser_notify(struct f_gser *gser, u8 type, u16 value,
@@ -877,8 +882,10 @@ int gser_bind_config(struct usb_configuration *c, u8 port_num)
 	/* We support only two ports for now */
 	if (port_num == 0)
 		gser->port.func.name = "modem";
-	else
+	else if (port_num == 1)
 		gser->port.func.name = "nmea";
+	else
+		gser->port.func.name = "at";
 	gser->port.func.setup = gser_setup;
 	gser->port.connect = gser_connect;
 	gser->port.get_dtr = gser_get_dtr;

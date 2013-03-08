@@ -444,6 +444,18 @@ rndis_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 			if (buf) {
 				memcpy(req->buf, buf, n);
 				req->complete = rndis_response_complete;
+
+				/*rndis: fix Missing req->context assignment
+				From: Lukasz Majewski <l.majewski@xxxxxxxxxxx>
+				It is crucial to assign each req->context value to struct rndis.
+				The problem happens for multi function gadget (g_multi) when multiple
+				functions are calling common usb_composite_dev control request.
+				It might happen that *_setup method from one usb function will
+				alter some fields of this common request issued by other USB
+				function.*/
+				req->context = rndis;
+				/*end*/
+				
 				rndis_free_response(rndis->config, buf);
 				value = n;
 			}

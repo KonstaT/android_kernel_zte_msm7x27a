@@ -1594,6 +1594,7 @@ reset_link:
 				__func__, readl_relaxed(USB_GEN_CONFIG));
 	}
 	/* Ensure that RESET operation is completed before turning off clock */
+
 	mb();
 
 	clk_disable(dev->alt_core_clk);
@@ -1649,6 +1650,7 @@ reset_link:
 		wake_lock(&dev->wlock);
 		queue_work(dev->wq, &dev->sm_work);
 	}
+
 }
 
 static void msm_otg_sm_work(struct work_struct *w)
@@ -2543,7 +2545,7 @@ static int otg_debugfs_init(struct msm_otg *dev)
 	if (!otg_debug_root)
 		return -ENOENT;
 
-	otg_debug_mode = debugfs_create_file("mode", 0222,
+	otg_debug_mode = debugfs_create_file("mode", 0224,
 						otg_debug_root, dev,
 						&otgfs_fops);
 	if (!otg_debug_mode)

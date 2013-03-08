@@ -205,6 +205,17 @@ struct interrupt_data {
 /* Length of a SCSI Command Data Block */
 #define MAX_COMMAND_SIZE	16
 
+//SCSI Command for swithing on Windows and Mac OS
+#define SC_SWITCH_MODE	0x85 
+#define SC_SWITCH_MODE_MAC_OS	0xa1 
+
+//SCSI Command for OS X
+#define SC_GET_CONFIGRATION    0x46
+#define SC_SET_CD_SPEED	           0xbb	
+
+// xingbeilei_20110801 start_stop usb debug
+#define SC_START_STOP_USB_DEBUG  0x86
+
 /* SCSI Sense Key/Additional Sense Code/ASC Qualifier values */
 #define SS_NO_SENSE				0
 #define SS_COMMUNICATION_FAILURE		0x040800

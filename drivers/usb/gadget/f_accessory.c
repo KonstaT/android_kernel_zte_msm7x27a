@@ -40,7 +40,9 @@
 #define BULK_BUFFER_SIZE    16384
 #define ACC_STRING_SIZE     256
 
-#define PROTOCOL_VERSION    1
+//#define PROTOCOL_VERSION    1  //cts
+#define PROTOCOL_VERSION    2
+
 
 /* String IDs */
 #define INTERFACE_STRING_INDEX	0
