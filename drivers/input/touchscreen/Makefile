@@ -74,3 +74,6 @@ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS)	+= synaptics_rmi.o
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_FW)	+= synaptics_rmi_fw.o
 obj-$(CONFIG_TOUCHSCREEN_FOCALTECH)	+= focaltech_ft5x0x.o
 obj-$(CONFIG_TOUCHSCREEN_FOCALTECH_FW)	+= focaltech_ft5x0x_fw.o
+
+# Ignore warnings to prevent build breaks when using gcc 4.6
+CFLAGS_focaltech_ft5x0x.o = -Wno-maybe-uninitialized

@@ -58,3 +58,7 @@ obj-$(CONFIG_FB_MSM_WRITEBACK_MSM_PANEL) += wfd/
 obj-$(CONFIG_MT9D115)  += mt9d115.o  mt9d115_reg.o
 obj-$(CONFIG_S5K5CAGX_SAMSUNG_FPC)  += s5k5cagx_fpc.o
 obj-$(CONFIG_OV7692)  += ov7692.o  ov7692_reg.o
+
+# Ignore warnings to prevent build breaks when using gcc 4.6
+CFLAGS_ov5640.o = -Wno-uninitialized
+CFLAGS_s5k5cagx_fpc.o = -Wno-maybe-uninitialized
