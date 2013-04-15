@@ -100,11 +100,42 @@ again:
 }
 EXPORT_SYMBOL(msm_proc_comm_reset_modem_now);
 
+#define _NV_WLAN_MAC_ADDRESS_	4678
+#define _NV_WLAN_ATHEROS_SPECIFIC_CFG_	3757
+int msm_hsusb_get_set_usb_conf_nv_value(uint32_t nv_item,uint32_t value,uint32_t is_write);
 int msm_proc_comm(unsigned cmd, unsigned *data1, unsigned *data2)
 {
 	unsigned base = (unsigned)MSM_SHARED_RAM_BASE;
 	unsigned long flags;
 	int ret;
+
+	if(cmd == PCOM_CUSTOMER_CMD1){
+		if(*data2 & (1<<31)){
+			char wifi_addr[6]={0};
+		
+			ret = msm_hsusb_get_set_usb_conf_nv_value(_NV_WLAN_MAC_ADDRESS_, (uint32_t)wifi_addr, 0);
+			if(!ret){
+				*data1=(unsigned)(wifi_addr[0]+(wifi_addr[1]<<8)+(wifi_addr[2]<<16)+(wifi_addr[3]<<24));
+        			*data2=(unsigned)(wifi_addr[4]+(wifi_addr[5]<<8));	
+			}
+			return ret;
+		}
+		else if((*data2>>24) & 0xFF){
+			char wifi_atheros_rf_data[24] = {0};
+			int wifi_channel_offset = 0;
+			
+			ret = msm_hsusb_get_set_usb_conf_nv_value(_NV_WLAN_ATHEROS_SPECIFIC_CFG_, (uint32_t)wifi_atheros_rf_data, 0);
+			if(!ret){
+				wifi_channel_offset = ((*data2 >> 24) - 1)*8;
+				*data1 = (unsigned)(wifi_atheros_rf_data[0 + wifi_channel_offset] + (wifi_atheros_rf_data[1 + wifi_channel_offset] << 8) + (wifi_atheros_rf_data[2 + wifi_channel_offset] << 16) + (wifi_atheros_rf_data[3 + wifi_channel_offset] << 24));
+				*data2 = (unsigned)(wifi_atheros_rf_data[4 + wifi_channel_offset] + (wifi_atheros_rf_data[5 + wifi_channel_offset] << 8) + (wifi_atheros_rf_data[6 + wifi_channel_offset] << 16) + (wifi_atheros_rf_data[7 + wifi_channel_offset] << 24));
+			}		
+			return ret;
+		}
+		else{
+		}
+
+	}
 
 	spin_lock_irqsave(&proc_comm_lock, flags);
 

@@ -121,6 +121,55 @@ static struct uid_stat *create_stat(uid_t uid) {
 	return new_uid;
 }
 
+#ifdef CONFIG_ZTE_PLATFORM
+#include <linux/module.h>
+#include <linux/mm.h>
+enum {
+	DEBUG_TCP_SND = 1U << 0,
+	DEBUG_TCP_RCV = 1U << 1,
+};
+
+static int debug_mask = 0;
+module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
+
+char cmdline_buf[PAGE_SIZE]={0};
+static int get_cmdline(char * buffer)
+{
+	int res = 0;
+	unsigned int len;
+	struct mm_struct *mm = get_task_mm(current);
+	if (!mm)
+		goto out;
+	if (!mm->arg_end)
+		goto out_mm;	/* Shh! No looking before we're done */
+
+ 	len = mm->arg_end - mm->arg_start;
+ 
+	if (len > PAGE_SIZE)
+		len = PAGE_SIZE;
+ 
+	res = access_process_vm(current, mm->arg_start, buffer, len, 0);
+
+	// If the nul at the end of args has been overwritten, then
+	// assume application is using setproctitle(3).
+	if (res > 0 && buffer[res-1] != '\0' && len < PAGE_SIZE) {
+		len = strnlen(buffer, res);
+		if (len < res) {
+		    res = len;
+		} else {
+			len = mm->env_end - mm->env_start;
+			if (len > PAGE_SIZE - res)
+				len = PAGE_SIZE - res;
+			res += access_process_vm(current, mm->env_start, buffer+res, len, 0);
+			res = strnlen(buffer, res);
+		}
+	}
+out_mm:
+	mmput(mm);
+out:
+	return res;
+}
+#endif
 int uid_stat_tcp_snd(uid_t uid, int size) {
 	struct uid_stat *entry;
 	activity_stats_update();
@@ -129,6 +178,13 @@ int uid_stat_tcp_snd(uid_t uid, int size) {
 			return -1;
 	}
 	atomic_add(size, &entry->tcp_snd);
+	#ifdef CONFIG_ZTE_PLATFORM
+	if (debug_mask & DEBUG_TCP_SND) {
+	memset(cmdline_buf,0,sizeof(cmdline_buf));
+	get_cmdline(cmdline_buf);
+	pr_info("TCP_SND: uid=%d(%s) size=%d\n",uid,cmdline_buf,size);
+	#endif
+	}
 	return 0;
 }
 
@@ -140,6 +196,14 @@ int uid_stat_tcp_rcv(uid_t uid, int size) {
 			return -1;
 	}
 	atomic_add(size, &entry->tcp_rcv);
+	
+	#ifdef CONFIG_ZTE_PLATFORM
+	if (debug_mask & DEBUG_TCP_RCV) {
+		memset(cmdline_buf,0,sizeof(cmdline_buf));
+		get_cmdline(cmdline_buf);
+		pr_info("TCP_RCV: uid=%d(%s) size=%d\n",uid,cmdline_buf,size);
+	}
+	#endif
 	return 0;
 }
 

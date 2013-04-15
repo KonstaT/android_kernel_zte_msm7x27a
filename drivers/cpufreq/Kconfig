@@ -17,6 +17,12 @@ config CPU_FREQ
 
 if CPU_FREQ
 
+config ZTE_NO_CPUFREQ_ONDEMAND_KEYBOARD
+	bool "Disable change cpufreq while input is keyboard"
+	default n
+	help
+	  Not change cpufreq for keyboard
+
 config CPU_FREQ_TABLE
 	tristate
 

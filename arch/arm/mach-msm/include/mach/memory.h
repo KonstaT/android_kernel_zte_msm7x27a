@@ -65,7 +65,23 @@ extern unsigned long ebi1_phys_offset;
 
 #endif
 #endif
+#elif defined(CONFIG_ARCH_MSM7X27A)
+#define EBI0_PHYS_OFFSET PHYS_OFFSET
+#define EBI0_PAGE_OFFSET PAGE_OFFSET
+#define EBI0_SIZE 0x10000000
 
+#define EBI1_PHYS_OFFSET 0x20000000
+#define EBI1_PAGE_OFFSET (EBI0_PAGE_OFFSET + EBI0_SIZE)
+
+#define __phys_to_virt(phys)				\
+	((phys) >= EBI1_PHYS_OFFSET ?			\
+	(phys) - EBI1_PHYS_OFFSET + EBI1_PAGE_OFFSET :	\
+	(phys) - EBI0_PHYS_OFFSET + EBI0_PAGE_OFFSET)
+
+#define __virt_to_phys(virt)				\
+	((virt) >= EBI1_PAGE_OFFSET ?			\
+	(virt) - EBI1_PAGE_OFFSET + EBI1_PHYS_OFFSET :	\
+	(virt) - EBI0_PAGE_OFFSET + EBI0_PHYS_OFFSET)
 #endif
 
 #ifndef __ASSEMBLY__

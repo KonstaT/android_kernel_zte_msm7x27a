@@ -83,7 +83,7 @@ static struct smd_config smd_configs[] = {
 	{2, "APPS_RIVA_BT_ACL", NULL, SMD_APPS_WCNSS},
 	{3, "APPS_RIVA_BT_CMD", NULL, SMD_APPS_WCNSS},
 	{4, "MBALBRIDGE", NULL, SMD_APPS_MODEM},
-	{7, "DATA1", NULL, SMD_APPS_MODEM},
+	//{7, "DATA1", NULL, SMD_APPS_MODEM},
 	{11, "DATA11", NULL, SMD_APPS_MODEM},
 	{21, "DATA21", NULL, SMD_APPS_MODEM},
 	{27, "GPSNMEA", NULL, SMD_APPS_MODEM},
@@ -552,6 +552,7 @@ static int __init smd_tty_init(void)
 			legacy_ds |= cpu_is_msm7x01() || cpu_is_msm7x25();
 			legacy_ds |= cpu_is_msm7x27() || cpu_is_msm7x30();
 			legacy_ds |= cpu_is_qsd8x50() || cpu_is_msm8x55();
+			//legacy_ds |= cpu_is_msm7x25a() || cpu_is_msm7x27a();
 			/*
 			 * use legacy mode for 8660 Standalone (subtype 0)
 			 */

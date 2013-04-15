@@ -137,6 +137,35 @@ static void vt_event_wait(struct vt_event_wait *vw)
 	spin_unlock_irqrestore(&vt_event_lock, flags);
 }
 
+#ifdef CONFIG_ZTE_PLATFORM 
+/**
+ *	vt_event_wait_zte		-	wait for an event
+ *	@vw: our event
+ *
+ *	Waits for an event to occur which completes our vt_event_wait
+ *	structure. On return the structure has wv->done set to 1 for success
+ *	or 0 if some event such as a signal ended the wait.
+ */
+
+static void vt_event_wait_zte(struct vt_event_wait *vw,int n)
+{
+	unsigned long flags;
+	/* Prepare the event */
+	INIT_LIST_HEAD(&vw->list);
+	vw->done = 0;
+	/* Queue our event */
+	spin_lock_irqsave(&vt_event_lock, flags);
+	list_add(&vw->list, &vt_events);
+	spin_unlock_irqrestore(&vt_event_lock, flags);
+	/* Wait for it to pass */
+	wait_event_interruptible_tty(vt_event_waitqueue, (vw->done||(n == fg_console + 1)));
+	/* Dequeue it */
+	spin_lock_irqsave(&vt_event_lock, flags);
+	list_del(&vw->list);
+	spin_unlock_irqrestore(&vt_event_lock, flags);
+}
+#endif
+
 /**
  *	vt_event_wait_ioctl	-	event ioctl handler
  *	@arg: argument to ioctl
@@ -180,8 +209,13 @@ int vt_waitactive(int n)
 		if (n == fg_console + 1)
 			break;
 		vw.event.event = VT_EVENT_SWITCH;
+#ifdef CONFIG_ZTE_PLATFORM 
+		vt_event_wait_zte(&vw,n);
+		if ((vw.done == 0)&&(n != fg_console + 1))		//already post and switch successfully, return 0
+#else
 		vt_event_wait(&vw);
 		if (vw.done == 0)
+#endif
 			return -EINTR;
 	} while (vw.event.newev != n);
 	return 0;
@@ -1757,6 +1791,7 @@ int vt_move_to_console(unsigned int vt, int alloc)
 	}
 	prev = fg_console;
 
+	printk("zte_console vt_move_to_console BEGIN: %s console    %d ---->   %d!!!!\n",alloc?"SUSPEND":"RESUME",prev,vt);
 	if (alloc && vc_allocate(vt)) {
 		/* we can't have a free VC for now. Too bad,
 		 * we don't want to mess the screen for now. */
@@ -1781,6 +1816,7 @@ int vt_move_to_console(unsigned int vt, int alloc)
 		return -EINTR;
 	}
 	tty_unlock();
+	printk("zte_console vt_move_to_console DONE!!!!\n");
 	return prev;
 }
 

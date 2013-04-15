@@ -63,6 +63,7 @@
 #include "sirc.h"
 #include "pm-boot.h"
 
+#define CONFIG_ZTE_ALARM
 /******************************************************************************
  * Debug Definitions
  *****************************************************************************/
@@ -77,7 +78,11 @@ enum {
 	MSM_PM_DEBUG_IDLE = 1U << 6,
 };
 
+#ifdef CONFIG_ZTE_PLATFORM
+static int msm_pm_debug_mask = MSM_PM_DEBUG_SUSPEND | MSM_PM_DEBUG_POWER_COLLAPSE;
+#else
 static int msm_pm_debug_mask;
+#endif
 module_param_named(
 	debug_mask, msm_pm_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP
 );
@@ -607,7 +612,11 @@ static int msm_pm_poll_state(int nr_grps, struct msm_pm_polled_group *grps)
  *****************************************************************************/
 
 #define SCLK_HZ (32768)
+#ifdef CONFIG_ZTE_PLATFORM
+#define MSM_PM_SLEEP_TICK_LIMIT (0x54600000)
+#else
 #define MSM_PM_SLEEP_TICK_LIMIT (0x6DDD000)
+#endif
 
 #ifdef CONFIG_MSM_SLEEP_TIME_OVERRIDE
 static int msm_pm_sleep_time_override;
@@ -646,8 +655,8 @@ void msm_pm_set_max_sleep_time(int64_t max_sleep_time_ns)
 	}
 
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND, KERN_INFO,
-		"%s(): Requested %lld ns Giving %u sclk ticks\n", __func__,
-		max_sleep_time_ns, msm_pm_max_sleep_time);
+		"%s(): Requested %lld ns Giving %u sclk ticks (= %d s)\n", __func__,
+		max_sleep_time_ns, msm_pm_max_sleep_time,msm_pm_max_sleep_time>>15);
 	local_irq_restore(flags);
 }
 EXPORT_SYMBOL(msm_pm_set_max_sleep_time);
@@ -968,13 +977,141 @@ static atomic_t msm_pm_init_done = ATOMIC_INIT(0);
 static int msm_pm_modem_busy(void)
 {
 	if (!(smsm_get_state(SMSM_POWER_MASTER_DEM) & DEM_MASTER_SMSM_READY)) {
-		MSM_PM_DPRINTK(MSM_PM_DEBUG_POWER_COLLAPSE,
-			KERN_INFO, "%s(): master not ready\n", __func__);
+	#ifndef CONFIG_ZTE_PLATFORM
+		  if (!from_idle)
+    
+		       MSM_PM_DPRINTK(MSM_PM_DEBUG_POWER_COLLAPSE,
+			         /KERN_INFO, "%s(): master not ready1\n", __func__);
+	 #endif
 		return -EBUSY;
 	}
 
 	return 0;
 }
+
+
+#ifdef CONFIG_ZTE_SUSPEND_WAKEUP_MONITOR
+struct msm_pm_smem_t * get_msm_pm_smem_data(void)
+{
+	return msm_pm_smem_data;
+}
+#endif
+
+#ifdef CONFIG_ZTE_PLATFORM
+
+#define ZTE_PM_DUMP_NOT_OKTS
+#ifdef ZTE_PM_DUMP_NOT_OKTS
+#define ZTE_PROC_COMM_CMD3_DUMP_NOT_OKTS 18		//proc command used to dump not_okts clients
+#define ZTE_PROC_COMM_CMD3_DUMP_NOT_OKTS_CLK 19	//proc command used to dump clk if not_okts clients include CLKREGIM
+#define NOT_OKTS_CLKREGIM  0x1	//maybe different,should adjust according to "Voters:CLKREGIM ADCDRV APROC NLED QDSP HS CE_DM DIAG UIM GL1 WL1 CHG GPS  " 
+
+static int msm_pm_idle_get_not_okts = 0;
+module_param_named(
+	idle_enable_get_not_okts, msm_pm_idle_get_not_okts,
+	int, S_IRUGO | S_IWUSR | S_IWGRP
+);
+
+void zte_get_not_okts_proccomm(bool from_idle)		// false to dump when suspend,true for  idle-->> pc
+{
+	uint32_t modem_not_okts =0;
+	uint32_t subcmd=ZTE_PROC_COMM_CMD3_DUMP_NOT_OKTS;
+	msm_proc_comm(PCOM_CUSTOMER_CMD3, &modem_not_okts, &subcmd);
+	if(modem_not_okts)		//modem can't enter TCXO_SHUTDOWN
+	{
+		printk("PM: modem can't enter TCXO_SHUTDOWN cause of clients: 0x%x (Ignore 0x4 for APROC)while APP enter %s\n",modem_not_okts,from_idle?"IDLE-->>PC":"SUSPEND");
+	}
+	if(modem_not_okts & NOT_OKTS_CLKREGIM)	//modem can't enter TCXO_SHUTDOWN cause of CLKREGIM,need to dump enabled clks.
+	{
+		if(subcmd > 0) 
+		{
+			pr_info("[TCXO] enabled clock id :%d+ 1's position(begin 0) in 0x%x\n",(32*0),subcmd);
+		}
+		 subcmd=ZTE_PROC_COMM_CMD3_DUMP_NOT_OKTS_CLK;
+		msm_proc_comm(PCOM_CUSTOMER_CMD3, &modem_not_okts, &subcmd);
+		if(modem_not_okts > 0) 
+		{
+			pr_info("[TCXO] enabled clock id :%d+ 1's position(begin 0) in 0x%x\n",(32*1),modem_not_okts);
+		}
+		if(subcmd > 0) 
+		{
+			pr_info("[TCXO] enabled clock id :%d+ 1's position(begin 0) in 0x%x\n",(32*2),subcmd);
+		}
+		
+	}
+}
+
+#endif
+long lateresume_2_earlysuspend_time_s = 0;
+void zte_update_lateresume_2_earlysuspend_time(bool resume_or_earlysuspend)
+{
+	if(resume_or_earlysuspend)//lateresume,need to record when the lcd is turned on
+	{
+		lateresume_2_earlysuspend_time_s = current_kernel_time().tv_sec;
+	}
+	else	//earlysuspend,need to record when the lcd is turned off
+	{
+		lateresume_2_earlysuspend_time_s = current_kernel_time().tv_sec - lateresume_2_earlysuspend_time_s;	//record how long the lcd keeps on
+	}
+}
+
+extern unsigned pm_modem_sleep_time_get(void);
+struct timespec time_updated_when_sleep_awake;
+void record_sleep_awake_time(bool record_sleep_awake)
+{
+	//record_sleep_awake?: true?record awake time, else record  sleep time
+	struct timespec ts;
+	int time_updated_when_sleep_awake_s;
+	int time_updated_when_sleep_awake_ms;
+	long time_updated_when_sleep_awake_ms_temp;
+	static unsigned amss_sleep_time_ms = 0;
+	unsigned amss_sleep_time_ms_temp = 0;
+	int percentage_amss_not_sleep_while_app_suspend = 0;	//the percentage of modem awake while app suspend in %o;
+	static bool sleep_success_flag = false;  //set true while msm_pm_collapse returned 1 by passing record_sleep_awake as true;
+
+
+	ts = current_kernel_time();
+	time_updated_when_sleep_awake_ms_temp = (long)((ts.tv_sec - time_updated_when_sleep_awake.tv_sec) * MSEC_PER_SEC + (int)((ts.tv_nsec / NSEC_PER_MSEC) - (time_updated_when_sleep_awake.tv_nsec / NSEC_PER_MSEC)));
+	time_updated_when_sleep_awake_s = (int)(time_updated_when_sleep_awake_ms_temp/MSEC_PER_SEC);
+	time_updated_when_sleep_awake_ms = (int)(time_updated_when_sleep_awake_ms_temp - time_updated_when_sleep_awake_s * MSEC_PER_SEC);
+//	MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
+//		KERN_INFO, "%s(): keep: %10d.%03d s !!!!!!!!!!%s\n", __func__,time_updated_when_sleep_awake_s,time_updated_when_sleep_awake_ms,record_sleep_awake?"awake":"sleep");
+	if(record_sleep_awake)//record awake time
+	{
+		sleep_success_flag = true;
+		MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
+			KERN_INFO, "%s(): APP keep: %10d.%03d s !!!!!!!!!!awake   lcd on for %10d s %3d %%\n", __func__,time_updated_when_sleep_awake_s,time_updated_when_sleep_awake_ms,(int)lateresume_2_earlysuspend_time_s,(int)(lateresume_2_earlysuspend_time_s*100/(time_updated_when_sleep_awake_s + 1)));//in case Division by zero, +1
+		time_updated_when_sleep_awake = ts; 
+		lateresume_2_earlysuspend_time_s = 0;
+	}
+	else	//record sleep time
+	{
+		if(!sleep_success_flag) //only record sleep time while really resume after successfully suspend/sleep;
+		{
+			printk("%s: modem sleep: resume after fail to suspend\n",__func__);
+			return;
+		}
+		sleep_success_flag = false;
+		amss_sleep_time_ms_temp = amss_sleep_time_ms;	//backup previous total sleep time
+		amss_sleep_time_ms  = pm_modem_sleep_time_get();	//get new total sleep time
+		//printk("%s: modem sleep pre: %d  new %d ms\n",__func__,(int)amss_sleep_time_ms_temp ,amss_sleep_time_ms);
+		amss_sleep_time_ms_temp = amss_sleep_time_ms - amss_sleep_time_ms_temp; //get the sleep time through last sleep
+		//printk("%s: modem sleep this time: %d ms\n",__func__,(int)amss_sleep_time_ms_temp);
+		amss_sleep_time_ms_temp = time_updated_when_sleep_awake_s - amss_sleep_time_ms_temp / MSEC_PER_SEC;	//get modem awake time while APP sleep IN second
+		percentage_amss_not_sleep_while_app_suspend = (int)amss_sleep_time_ms_temp*1000/(time_updated_when_sleep_awake_s + 1);
+		MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
+		KERN_INFO, "%s(): APP keep: %10d.%03d s !!!!!!!!!!sleep!!!!!!!! modem awake %10d seconds %4d %%o\n", __func__,time_updated_when_sleep_awake_s,time_updated_when_sleep_awake_ms,(int)amss_sleep_time_ms_temp,percentage_amss_not_sleep_while_app_suspend);//modem keep awake normally about 2% while app sleeps
+		time_updated_when_sleep_awake = ts; 
+		#ifdef ZTE_PM_DUMP_NOT_OKTS
+		if(percentage_amss_not_sleep_while_app_suspend >=800)
+		{
+			zte_get_not_okts_proccomm(false);
+		}
+		#endif
+	}
+
+}
+extern void zte_need_2_prink_rpc_while_wakeup(void);
+#endif
 
 /*
  * Power collapse the Apps processor.  This function executes the handshake
@@ -994,14 +1131,21 @@ static int msm_pm_power_collapse
 	int collapsed = 0;
 	int ret;
 
-	MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
-		KERN_INFO, "%s(): idle %d, delay %u, limit %u\n", __func__,
-		(int)from_idle, sleep_delay, sleep_limit);
-
+#ifdef CONFIG_ZTE_PLATFORM
+	if(!from_idle)
+#endif
+	{
+		MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
+			KERN_INFO, "%s(): idle %d, delay %u, limit %u\n", __func__,
+			(int)from_idle, sleep_delay, sleep_limit);
+	}
 	if (!(smsm_get_state(SMSM_POWER_MASTER_DEM) & DEM_MASTER_SMSM_READY)) {
+		#ifdef CONFIG_ZTE_PLATFORM
+		if (!from_idle)
+   #endif
 		MSM_PM_DPRINTK(
 			MSM_PM_DEBUG_SUSPEND | MSM_PM_DEBUG_POWER_COLLAPSE,
-			KERN_INFO, "%s(): master not ready\n", __func__);
+			KERN_INFO, "%s(): master not ready2\n", __func__);
 		ret = -EBUSY;
 		goto power_collapse_bail;
 	}
@@ -1024,7 +1168,13 @@ static int msm_pm_power_collapse
 		smsm_change_state(SMSM_APPS_DEM, DEM_SLAVE_SMSM_RUN,
 			DEM_SLAVE_SMSM_PWRC | DEM_SLAVE_SMSM_PWRC_SUSPEND);
 
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): PWRC");
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_SLEEP_INFO();
 
 	memset(state_grps, 0, sizeof(state_grps));
@@ -1036,12 +1186,18 @@ static int msm_pm_power_collapse
 	ret = msm_pm_poll_state(ARRAY_SIZE(state_grps), state_grps);
 
 	if (ret < 0) {
+#ifdef CONFIG_ZTE_PLATFORM
+		if (!from_idle)
+#endif
 		printk(KERN_EMERG "%s(): power collapse entry "
 			"timed out waiting for Modem's response\n", __func__);
 		msm_pm_timeout();
 	}
 
 	if (ret == 1) {
+#ifdef CONFIG_ZTE_PLATFORM
+		if (!from_idle)
+#endif
 		MSM_PM_DPRINTK(
 			MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
 			KERN_INFO,
@@ -1052,10 +1208,16 @@ static int msm_pm_power_collapse
 
 	/* DEM Master in RSA */
 
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): PWRC RSA");
 
 	ret = msm_irq_enter_sleep2(true, from_idle);
 	if (ret < 0) {
+		#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+   #endif
 		MSM_PM_DPRINTK(
 			MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
 			KERN_INFO,
@@ -1065,9 +1227,15 @@ static int msm_pm_power_collapse
 	}
 
 	msm_pm_config_hw_before_power_down();
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): pre power down");
 
 	saved_acpuclk_rate = acpuclk_power_collapse();
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_CLOCK, KERN_INFO,
 		"%s(): change clock rate (old rate = %lu)\n", __func__,
 		saved_acpuclk_rate);
@@ -1106,15 +1274,30 @@ static int msm_pm_power_collapse
 		local_fiq_enable();
 	}
 
-	MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND | MSM_PM_DEBUG_POWER_COLLAPSE,
-		KERN_INFO,
-		"%s(): msm_pm_collapse returned %d\n", __func__, collapsed);
-
+	if(!from_idle)
+	{
+		MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND | MSM_PM_DEBUG_POWER_COLLAPSE,
+			KERN_INFO,
+			"%s(): msm_pm_collapse returned %d\n", __func__, collapsed);
+	}
+#ifdef CONFIG_ZTE_PLATFORM
+		if((collapsed == 1)&&(!from_idle))
+		{
+			record_sleep_awake_time(true);
+		    zte_need_2_prink_rpc_while_wakeup();
+		}
+#endif
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_CLOCK, KERN_INFO,
 		"%s(): restore clock rate to %lu\n", __func__,
 		saved_acpuclk_rate);
 	if (acpuclk_set_rate(smp_processor_id(), saved_acpuclk_rate,
 			SETRATE_PC) < 0)
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 		printk(KERN_ERR "%s(): failed to restore clock rate(%lu)\n",
 			__func__, saved_acpuclk_rate);
 
@@ -1135,12 +1318,18 @@ static int msm_pm_power_collapse
 	ret = msm_pm_poll_state(ARRAY_SIZE(state_grps), state_grps);
 
 	if (ret < 0) {
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 		printk(KERN_EMERG "%s(): power collapse exit "
 			"timed out waiting for Modem's response\n", __func__);
 		msm_pm_timeout();
 	}
 
 	if (ret == 1) {
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 		MSM_PM_DPRINTK(
 			MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
 			KERN_INFO,
@@ -1164,6 +1353,9 @@ static int msm_pm_power_collapse
 		DEM_SLAVE_SMSM_PWRC | DEM_SLAVE_SMSM_PWRC_SUSPEND,
 		DEM_SLAVE_SMSM_WFPI);
 
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): WFPI");
 
 	memset(state_grps, 0, sizeof(state_grps));
@@ -1175,12 +1367,18 @@ static int msm_pm_power_collapse
 	ret = msm_pm_poll_state(ARRAY_SIZE(state_grps), state_grps);
 
 	if (ret < 0) {
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 		printk(KERN_EMERG "%s(): power collapse WFPI "
 			"timed out waiting for Modem's response\n", __func__);
 		msm_pm_timeout();
 	}
 
 	if (ret == 1) {
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 		MSM_PM_DPRINTK(
 			MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
 			KERN_INFO,
@@ -1192,7 +1390,13 @@ static int msm_pm_power_collapse
 
 	/* DEM Master == RUN */
 
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): WFPI RUN");
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_SLEEP_INFO();
 
 	msm_irq_exit_sleep2(msm_pm_smem_data->irq_mask,
@@ -1206,7 +1410,13 @@ static int msm_pm_power_collapse
 
 	smsm_change_state(SMSM_APPS_DEM,
 		DEM_SLAVE_SMSM_WFPI, DEM_SLAVE_SMSM_RUN);
-
+#ifdef ZTE_PM_DUMP_NOT_OKTS
+if(from_idle && msm_pm_idle_get_not_okts)
+	zte_get_not_okts_proccomm(from_idle);
+#endif
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): RUN");
 
 	smd_sleep_exit();
@@ -1219,6 +1429,9 @@ power_collapse_early_exit:
 		DEM_SLAVE_SMSM_PWRC | DEM_SLAVE_SMSM_PWRC_SUSPEND,
 		DEM_SLAVE_SMSM_PWRC_EARLY_EXIT);
 
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): EARLY_EXIT");
 
 	memset(state_grps, 0, sizeof(state_grps));
@@ -1228,15 +1441,24 @@ power_collapse_early_exit:
 	state_grps[1].bits_all_set = SMSM_RESET;
 
 	ret = msm_pm_poll_state(ARRAY_SIZE(state_grps), state_grps);
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): EARLY_EXIT EE");
 
 	if (ret < 0) {
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 		printk(KERN_EMERG "%s(): power collapse EARLY_EXIT "
 			"timed out waiting for Modem's response\n", __func__);
 		msm_pm_timeout();
 	}
 
 	if (ret == 1) {
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 		MSM_PM_DPRINTK(
 			MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
 			KERN_INFO,
@@ -1257,6 +1479,9 @@ power_collapse_restore_gpio_bail:
 		DEM_SLAVE_SMSM_PWRC | DEM_SLAVE_SMSM_PWRC_SUSPEND |
 		DEM_SLAVE_SMSM_PWRC_EARLY_EXIT, DEM_SLAVE_SMSM_RUN);
 
+#ifdef CONFIG_ZTE_PLATFORM
+	if (!from_idle)
+#endif
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): RUN");
 
 	if (collapsed)
@@ -1265,6 +1490,7 @@ power_collapse_restore_gpio_bail:
 power_collapse_bail:
 	return ret;
 }
+
 
 /*
  * Power collapse the Apps processor without involving Modem.
@@ -1277,8 +1503,10 @@ static int msm_pm_power_collapse_standalone(void)
 	int collapsed = 0;
 	int ret;
 
+#ifndef CONFIG_ZTE_PLATFORM
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
 		KERN_INFO, "%s()\n", __func__);
+#endif
 
 	ret = msm_spm_set_low_power_mode(MSM_SPM_MODE_POWER_COLLAPSE, false);
 	WARN_ON(ret);
@@ -1310,9 +1538,11 @@ static int msm_pm_power_collapse_standalone(void)
 		local_fiq_enable();
 	}
 
+#ifndef CONFIG_ZTE_PLATFORM
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND | MSM_PM_DEBUG_POWER_COLLAPSE,
 		KERN_INFO,
 		"%s(): msm_pm_collapse returned %d\n", __func__, collapsed);
+#endif
 
 	ret = msm_spm_set_low_power_mode(MSM_SPM_MODE_CLOCK_GATING, false);
 	WARN_ON(ret);
@@ -1369,6 +1599,9 @@ static int msm_pm_swfi(bool ramp_acpu)
 
 	return 0;
 }
+
+
+
 
 
 /******************************************************************************
@@ -1722,8 +1955,13 @@ static uint32_t restart_reason = 0x776655AA;
 
 static void msm_pm_power_off(void)
 {
+	unsigned int subid=14;
+	
 	msm_rpcrouter_close();
+        printk("msm_pm_power_off, set pwrdwn flag\n");
+	msm_proc_comm(PCOM_CUSTOMER_CMD3,0, &subid);
 	msm_proc_comm(PCOM_POWER_DOWN, 0, 0);
+	printk("msm_pm_power_off, waiting POWEROFF\n");
 	for (;;)
 		;
 }
@@ -1731,7 +1969,11 @@ static void msm_pm_power_off(void)
 static void msm_pm_restart(char str, const char *cmd)
 {
 	msm_rpcrouter_close();
+#ifdef CONFIG_ZTE_PLATFORM
+	msm_proc_comm(PCOM_RESET_CHIP_IMM, &restart_reason, 0);
+#else
 	msm_proc_comm(PCOM_RESET_CHIP, &restart_reason, 0);
+#endif
 
 	for (;;)
 		;
@@ -1763,9 +2005,117 @@ static struct notifier_block msm_reboot_notifier = {
 };
 
 
+/* ruanmeisi alarm for hibernate */
+#ifdef CONFIG_ZTE_ALARM
+#include <linux/zte_hibernate.h>
+struct hb_alarm {
+	s64 set;
+	s64 expire;
+};
+static struct hb_alarm  hb_alarm = {0};
+
+void clear_hb_alarm(void)
+{
+	hb_alarm.set = 0;
+	hb_alarm.expire = 0;
+}
+EXPORT_SYMBOL(clear_hb_alarm);
+
+int is_hb_alarm_expire(void)
+{
+	s64 nsec;
+	struct timespec now = {0};
+	if (hb_alarm.set == 0 || hb_alarm.expire == 0) {
+		return 0;
+	}
+	now = current_kernel_time();
+	nsec = 	timespec_to_ns(&now);
+	if (is_in_hibernate()) {	
+		printk(KERN_ERR"hb:%s %d %lld %lld now %lld %lld\n", __FUNCTION__, __LINE__, hb_alarm.set, hb_alarm.expire, nsec, nsec - hb_alarm.set);
+	}
+	//with a tolerance of less than 3s
+	if (nsec - hb_alarm.set + (s64)3000*NSEC_PER_MSEC >= hb_alarm.expire) {
+		return 1;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(is_hb_alarm_expire);
+static void set_hb_alarm(unsigned int expire)
+{
+	struct timespec now = current_kernel_time();
+	if (0 == expire) {
+		clear_hb_alarm();
+		return ;
+	}
+	hb_alarm.set = timespec_to_ns(&now);
+	hb_alarm.expire = (s64)expire*NSEC_PER_MSEC;
+	printk(KERN_ERR"hb:%s %d %lld %lld %u\n", __FUNCTION__, __LINE__, hb_alarm.set, hb_alarm.expire, expire);
+}
+
+#else
+void clear_hb_alarm(void){;}
+EXPORT_SYMBOL(clear_hb_alarm);
+static void set_hb_alarm(unsigned int expire) {;}
+int is_hb_alarm_expire(void) {return 0;}
+EXPORT_SYMBOL(is_hb_alarm_expire);
+#endif
+/* end */
 /******************************************************************************
  *
  *****************************************************************************/
+#ifdef CONFIG_ZTE_ALARM
+#define ZTE_PROC_COMM_CMD3_RTC_ALARM_DISABLE 6
+#define ZTE_PROC_COMM_CMD3_RTC_ALARM_ENABLE 7
+	static int zte_alarm_read_proc
+		(char *page, char **start, off_t off, int count, int *eof, void *data)
+	{
+		 int len = 0;
+		 uint32_t *expiration_ms=(uint32_t*)data;
+		 
+		 printk("ZTE rtc alarm read: the expiration time is =%d ms\n",*expiration_ms);
+		
+		  len = sprintf(page, "%d\n",*expiration_ms);
+		  return len;
+	}
+	
+	static int zte_alarm_write_proc(struct file *file, const char __user *buffer,
+		unsigned long count, void *data)
+	{
+		char tmp[16] = {0};
+		unsigned int  proc_id = 0;
+		uint32_t *expiration_ms=(uint32_t*)data;
+		
+		if (count < 1)
+			return -EINVAL;
+		
+		if(copy_from_user(tmp, buffer, count))
+					return -EFAULT;
+	
+		//To do something here
+		*expiration_ms=(uint32_t) (simple_strtol(tmp, NULL, 10));
+	
+		  printk("ZTE rtc alarm write: the expiration time is =%d ms\n",*expiration_ms);
+		  
+            /* ruanmeisi hibernate alarm */
+           set_hb_alarm(*expiration_ms);
+
+		  if(*expiration_ms==0)
+			{
+				proc_id=ZTE_PROC_COMM_CMD3_RTC_ALARM_DISABLE;
+			msm_proc_comm(PCOM_CUSTOMER_CMD3, expiration_ms, &proc_id);
+			}
+		 else
+		 {
+			proc_id=ZTE_PROC_COMM_CMD3_RTC_ALARM_ENABLE;
+			msm_proc_comm(PCOM_CUSTOMER_CMD3, expiration_ms, &proc_id);
+		 }
+		
+		return count;
+	
+	}
+#endif
+
+
 
 /*
  * Initialize the power management subsystem.
@@ -1853,6 +2203,31 @@ static int __init msm_pm_init(void)
 		d_entry->write_proc = msm_pm_write_proc;
 		d_entry->data = NULL;
 	}
+#endif
+
+#ifdef CONFIG_ZTE_ALARM
+{
+       uint32_t *new_data;
+       struct proc_dir_entry *d_entry2;
+	   
+	if ((new_data = kmalloc(sizeof(uint32_t), GFP_KERNEL)) == NULL)
+			return -ENOMEM;
+	*new_data  =0;
+		 
+       d_entry2 = create_proc_entry("zte_alarm",
+			S_IRUGO | S_IWUGO, NULL);
+	   
+	if (d_entry2) {
+		d_entry2->read_proc = zte_alarm_read_proc;
+		d_entry2->write_proc = zte_alarm_write_proc;
+		d_entry2->data = (void *)new_data;
+	}
+}	
+#endif
+
+#ifdef CONFIG_ZTE_PLATFORM
+	time_updated_when_sleep_awake = current_kernel_time();
+	lateresume_2_earlysuspend_time_s = time_updated_when_sleep_awake.tv_sec;
 #endif
 
 	return 0;

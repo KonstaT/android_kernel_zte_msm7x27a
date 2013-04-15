@@ -1254,6 +1254,15 @@ void diag_process_hdlc(void *data, unsigned len)
 	struct diag_hdlc_decode_type hdlc;
 	int ret, type = 0;
 	pr_debug("diag: HDLC decode fn, len of data  %d\n", len);
+
+	// skip preceding 0x7E for fixing hdlc framing bug, added by Liu Jinqian, 2011.10.18, ZTE_DIAGCHAR_LJQ_01
+	while(*((uint8_t*)data) == CONTROL_CHAR && len != 0)
+	{
+		data = (uint8_t*)data + 1;
+		--len;
+	}
+	// added end, by Liu Jinqian, 2011.10.18, ZTE_DIAGCHAR_LJQ_01
+
 	hdlc.dest_ptr = driver->hdlc_buf;
 	hdlc.dest_size = USB_MAX_OUT_BUF;
 	hdlc.src_ptr = data;

@@ -48,6 +48,7 @@ struct msm_hsusb_rpc_ids {
 	unsigned long	reset_rework_installed;
 	unsigned long	enable_pmic_ulpi_data0;
 	unsigned long	disable_pmic_ulpi_data0;
+	unsigned long   get_usb_conf_nv_value;//xingbeilei for nv_pid
 };
 
 static struct msm_hsusb_rpc_ids usb_rpc_ids;
@@ -67,6 +68,7 @@ static int msm_hsusb_init_rpc_ids(unsigned long vers)
 		usb_rpc_ids.reset_rework_installed	= 17;
 		usb_rpc_ids.enable_pmic_ulpi_data0	= 18;
 		usb_rpc_ids.disable_pmic_ulpi_data0	= 19;
+		usb_rpc_ids.get_usb_conf_nv_value	= 99; //xingbeilei for nv_pid
 		return 0;
 	} else if (vers == 0x00010002) {
 		usb_rpc_ids.prog			= 0x30000064;
@@ -80,6 +82,7 @@ static int msm_hsusb_init_rpc_ids(unsigned long vers)
 		usb_rpc_ids.reset_rework_installed	= 17;
 		usb_rpc_ids.enable_pmic_ulpi_data0	= 18;
 		usb_rpc_ids.disable_pmic_ulpi_data0	= 19;
+		usb_rpc_ids.get_usb_conf_nv_value	= 99; //xingbeilei for nv_pid
 		return 0;
 	} else {
 		pr_err("%s: no matches found for version\n",
@@ -605,18 +608,19 @@ int usb_diag_update_pid_and_serial_num(uint32_t pid, const char *snum)
 		return ret;
 
 	if (!snum) {
+		//printk(KERN_ERR "wangzy usb serial number is null\n");
 		ret = msm_hsusb_is_serial_num_null(1);
 		if (ret)
 			return ret;
-	}
+	}else{
 
-	ret = msm_hsusb_is_serial_num_null(0);
-	if (ret)
-		return ret;
-	ret = msm_hsusb_send_serial_number(snum);
-	if (ret)
-		return ret;
-
+		ret = msm_hsusb_is_serial_num_null(0);
+			if (ret)
+				return ret;
+		ret = msm_hsusb_send_serial_number(snum);
+		if (ret)
+			return ret;
+		}
 	return 0;
 }
 
@@ -656,4 +660,71 @@ void hsusb_chg_connected(enum chg_type chgtype)
 	msm_chg_usb_charger_connected(chgtype);
 }
 EXPORT_SYMBOL(hsusb_chg_connected);
+//xingbeilei add rpc for read nv
+#define _NV_WLAN_MAC_ADDRESS_	4678
+#define _NV_WLAN_ATHEROS_SPECIFIC_CFG_	3757
+int msm_hsusb_get_set_usb_conf_nv_value(uint32_t nv_item,uint32_t value,uint32_t is_write)
+{
+        int rc = 0;
+        struct hsusb_phy_start_req {
+		struct rpc_request_hdr hdr;
+		uint32_t nv_item;
+		uint32_t value;
+		uint32_t is_write;
+        } req;
+
+	struct nv23_value_rep {
+		struct rpc_reply_hdr hdr;
+		int value;
+		char wifidata[24];
+	} rep;
+	
+ 	if (!usb_ep || IS_ERR(usb_ep)) {
+		msm_hsusb_rpc_connect();
+	}
+	if (!usb_rpc_ids.get_usb_conf_nv_value) {
+		printk(KERN_ERR "%s: proc id not supported \n", __func__);
+		return -ENODATA;
+	}
+
+	req.nv_item = cpu_to_be32(nv_item);
+	req.value = cpu_to_be32(value);
+	req.is_write =cpu_to_be32(is_write);
+	rc = msm_rpc_call_reply(usb_ep, usb_rpc_ids.get_usb_conf_nv_value,
+				&req, sizeof(req),
+				&rep, sizeof(rep),
+				5 * HZ);
+	printk("======return value=%d \n\n",be32_to_cpu(rep.value));
+	if (rc < 0)
+	{
+		printk(KERN_ERR "%s: rpc call failed! error: %d\n" ,
+		       __func__, rc);
+		return rc;
+	}
+	else
+	{
+		printk(KERN_ERR "%s: rpc call success\n" ,
+		       __func__);
+	}
+	rc = be32_to_cpu(rep.value);
+
+	if(rc == 0)
+	{
+		if(nv_item == _NV_WLAN_MAC_ADDRESS_){
+		char * p = (char *)value;
+		
+		memcpy(p,rep.wifidata,6);
+		}
+		else if(nv_item == _NV_WLAN_ATHEROS_SPECIFIC_CFG_){
+		char *p = (char *)value;
+		
+		memcpy(p,rep.wifidata,24);
+		}
+		else{
+		}
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_hsusb_get_set_usb_conf_nv_value);
+//end
 #endif

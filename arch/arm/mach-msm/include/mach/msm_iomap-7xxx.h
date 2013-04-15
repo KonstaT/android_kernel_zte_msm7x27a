@@ -89,4 +89,8 @@
 
 #define MSM_STRONGLY_ORDERED_PAGE  0xFA0F0000
 
+#ifdef CONFIG_ZTE_PLATFORM
+#define MSM_SMEM_RAM_PHYS    0xFE00000
+#define MSM_SMEM_RAM_SIZE     (SZ_1M)
+#endif
 #endif

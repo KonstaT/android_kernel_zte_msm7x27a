@@ -37,6 +37,9 @@ struct wake_lock {
 	int                 flags;
 	const char         *name;
 	unsigned long       expires;
+#ifdef CONFIG_ZTE_HIBERNATE
+	unsigned long       lock_jiff;
+#endif
 #ifdef CONFIG_WAKELOCK_STAT
 	struct {
 		int             count;

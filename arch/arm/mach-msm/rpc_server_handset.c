@@ -11,7 +11,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+/*************************************************************************************************
+ *   when      who    what, where, why
+ * --------    ---    --------------------------------------------------------
+ ************************************************************************************************/
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -24,6 +27,7 @@
 #include <mach/msm_rpcrouter.h>
 #include <mach/board.h>
 #include <mach/rpc_server_handset.h>
+#include <linux/zte_hibernate.h>
 
 #define DRIVER_NAME	"msm-handset"
 
@@ -53,6 +57,30 @@
 #define HS_REL_K		0xFF	/* key release */
 
 #define SW_HEADPHONE_INSERT_W_MIC 1 /* HS with mic */
+
+#ifdef CONFIG_ZTE_PLATFORM
+#define HS_EXT_PWR_ON_K         0x78    /* External power was turned on        0x78    */
+#define HS_EXT_PWR_OFF_K        0x79    /* External power was turned off       0x79    */
+#endif
+
+#if 1 // def ZTE_FEATURE_HEADPHONE
+#include <linux/time.h>
+#include <asm/uaccess.h>
+#include <linux/proc_fs.h>
+
+typedef enum {
+	HS_NO_HEADSET = 0,
+	HS_HEADSET,
+	HS_HEADPHONE,
+	HS_HPH_MAX = 0xFF
+} hs_type_t;
+
+static struct timeval hs_tv[2];
+static hs_type_t hs_type = HS_NO_HEADSET;
+
+static void input_report_hph_event(struct work_struct *work);
+static bool hs_is_true_mic_event(void);
+#endif
 
 #define KEY(hs_key, input_key) ((hs_key << 24) | input_key)
 
@@ -181,14 +209,22 @@ struct hs_cmd_data_type {
 };
 
 static const uint32_t hs_key_map[] = {
+#ifdef CONFIG_ZTE_PLATFORM
+	KEY(HS_END_K, KEY_POWER),
+#else
 	KEY(HS_PWR_K, KEY_POWER),
 	KEY(HS_END_K, KEY_END),
+#endif
 	KEY(HS_STEREO_HEADSET_K, SW_HEADPHONE_INSERT_W_MIC),
 	KEY(HS_HEADSET_HEADPHONE_K, SW_HEADPHONE_INSERT),
 	KEY(HS_HEADSET_MICROPHONE_K, SW_MICROPHONE_INSERT),
 	KEY(HS_HEADSET_SWITCH_K, KEY_MEDIA),
 	KEY(HS_HEADSET_SWITCH_2_K, KEY_VOLUMEUP),
 	KEY(HS_HEADSET_SWITCH_3_K, KEY_VOLUMEDOWN),
+#ifdef CONFIG_ZTE_PLATFORM
+	KEY(HS_EXT_PWR_ON_K,KEY_WAKEUP),
+  KEY(HS_EXT_PWR_OFF_K,KEY_WAKEUP),
+#endif
 	0
 };
 
@@ -218,10 +254,17 @@ struct msm_handset {
 	struct switch_dev sdev;
 	struct msm_handset_platform_data *hs_pdata;
 	bool mic_on, hs_on;
+
+	#if 1
+	struct delayed_work hph_wq; /* Workqueue to send headset insert event */
+	#endif
 };
 
 static struct msm_rpc_client *rpc_client;
 static struct msm_handset *hs;
+
+
+extern void msm_batt_force_update(void);
 
 static int hs_find_key(uint32_t hscode)
 {
@@ -263,9 +306,71 @@ static void update_state(void)
  * key-press = (key_code, 0)
  * key-release = (key_code, 0xff)
  */
+#if 1
+static void input_report_hph_event(struct work_struct *work)
+{
+	hs->mic_on = hs->hs_on = 1;
+	input_report_switch(hs->ipdev, SW_HEADPHONE_INSERT,	hs->hs_on);
+	input_report_switch(hs->ipdev, SW_MICROPHONE_INSERT, hs->mic_on);
+	update_state();
+}
+
+static bool hs_is_true_mic_event()
+{
+	long int diff_tv_sec, diff_tv_usec, diff;
+	const long int MAX_DIFF_TIME = 600000L; /* 0.6s */
+
+	printk(KERN_ERR"[YXS]hs_tv[0] = %ld.%06ld\n", hs_tv[0].tv_sec, hs_tv[0].tv_usec);
+	printk(KERN_ERR"[YXS]hs_tv[1] = %ld.%06ld\n", hs_tv[1].tv_sec, hs_tv[1].tv_usec);
+
+	diff_tv_sec = hs_tv[1].tv_sec - hs_tv[0].tv_sec;
+	diff_tv_usec = hs_tv[1].tv_usec - hs_tv[0].tv_usec;
+
+	printk(KERN_ERR"[YXS]diff = %ld, %ld\n", diff_tv_sec, diff_tv_usec);
+	if (diff_tv_sec > 1) { /* bigger than 1s, this is a true MIC event */
+		printk(KERN_ERR"[YXS]1. This is a True MIC Event\n");
+		hs_type = HS_HEADSET;
+	} else if ((1 == diff_tv_sec) || (0 == diff_tv_sec)) {
+		diff = (diff_tv_sec ? (diff_tv_usec + 1000000) : diff_tv_usec);
+		if (diff < MAX_DIFF_TIME) {
+			printk(KERN_ERR"[YXS]This is Headset without MIC\n");
+			hs_type = HS_HEADPHONE;
+		} else {
+			printk(KERN_ERR"[YXS]0. This is a True MIC Event\n");
+			hs_type = HS_HEADSET;
+		}
+	} else {
+		printk(KERN_ERR"[YXS]Error! MIC Event is before Heaset Insert.\n");
+		return false;
+	}
+
+	return (HS_HEADSET == hs_type) ? true : false;
+}
+
+static int hs_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	int ret;
+
+	if (off > 0) {
+		ret = 0;
+	} else {
+		ret = sprintf(page, "%d\n", hs_type);
+	}
+
+    return ret;
+}
+#endif
+
 static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 {
 	int key, temp_key_code;
+
+	printk(KERN_ERR"[YXS]key_code 0x%x, key_parm 0x%x\n", key_code, key_parm);
+
+	if ((key_parm != HS_REL_K && key_code == HS_PWR_K)) {
+		powerkey_press_hibernate();
+	}
+
 
 	if (key_code == HS_REL_K)
 		key = hs_find_key(key_parm);
@@ -279,19 +384,72 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 
 	switch (key) {
 	case KEY_POWER:
+#ifdef CONFIG_ZTE_PLATFORM
+	case KEY_SLEEP:
+#else	
 	case KEY_END:
-	case KEY_MEDIA:
+#endif
+//	case KEY_MEDIA:
 	case KEY_VOLUMEUP:
 	case KEY_VOLUMEDOWN:
 		input_report_key(hs->ipdev, key, (key_code != HS_REL_K));
 		break;
+
+	case KEY_MEDIA:
+		#if 1
+		if (HS_NO_HEADSET == hs_type) { 
+			//printk("Headphone or No Headset, It should have no MIC Event");
+			printk(KERN_ERR"[YXS]No Headset, It should have no MIC Event");
+			return;
+		}
+
+		if (key_parm != HS_REL_K) {
+			do_gettimeofday(&hs_tv[1]); /* Keep the TIME of Headset MIC Event */
+
+			if (!hs_is_true_mic_event()) {
+				return;
+			}
+		}
+		#endif
+
+		input_report_key(hs->ipdev, key, (key_code != HS_REL_K));
+		break;
+
+#ifdef CONFIG_ZTE_PLATFORM
+case KEY_WAKEUP:
+		printk(KERN_ERR "--keycode from A9(charger)\n \tkey:%d keycode:%d\n",key,key_code);
+    		msm_batt_force_update();
+		break;
+#endif
 	case SW_HEADPHONE_INSERT_W_MIC:
+		#if 1
+		if (key_parm == HS_REL_K) { /* Headset is removed, del timer and report immediately */
+			hs_type = HS_NO_HEADSET;
+
+			if (delayed_work_pending(&hs->hph_wq)) {
+				cancel_delayed_work(&hs->hph_wq);
+				return;
+			}
+
+			hs->mic_on = hs->hs_on = 0;
+			input_report_switch(hs->ipdev, SW_HEADPHONE_INSERT, hs->hs_on);
+			input_report_switch(hs->ipdev, SW_MICROPHONE_INSERT, hs->mic_on);
+			update_state();
+		} else { /* Headset is inserted, delay report to wait MIC event */
+			hs_type = HS_HEADSET;
+
+			do_gettimeofday(&hs_tv[0]); /* Keep the TIME of Headset Plugin Event */
+
+			schedule_delayed_work(&hs->hph_wq, msecs_to_jiffies(910)); /* 910ms */
+		}
+		#else 
 		hs->mic_on = hs->hs_on = (key_code != HS_REL_K) ? 1 : 0;
 		input_report_switch(hs->ipdev, SW_HEADPHONE_INSERT,
 							hs->hs_on);
 		input_report_switch(hs->ipdev, SW_MICROPHONE_INSERT,
 							hs->mic_on);
 		update_state();
+		#endif
 		break;
 
 	case SW_HEADPHONE_INSERT:
@@ -601,6 +759,9 @@ static int __devinit hs_probe(struct platform_device *pdev)
 {
 	int rc = 0;
 	struct input_dev *ipdev;
+	#if 1
+	struct proc_dir_entry *proc_hs_type;
+	#endif
 
 	hs = kzalloc(sizeof(struct msm_handset), GFP_KERNEL);
 	if (!hs)
@@ -634,13 +795,20 @@ static int __devinit hs_probe(struct platform_device *pdev)
 	ipdev->id.product	= 1;
 	ipdev->id.version	= 1;
 
+#ifdef CONFIG_ZTE_PLATFORM
+	input_set_capability(ipdev, EV_KEY, KEY_WAKEUP);
+#endif
 	input_set_capability(ipdev, EV_KEY, KEY_MEDIA);
 	input_set_capability(ipdev, EV_KEY, KEY_VOLUMEUP);
 	input_set_capability(ipdev, EV_KEY, KEY_VOLUMEDOWN);
 	input_set_capability(ipdev, EV_SW, SW_HEADPHONE_INSERT);
 	input_set_capability(ipdev, EV_SW, SW_MICROPHONE_INSERT);
 	input_set_capability(ipdev, EV_KEY, KEY_POWER);
+#ifdef CONFIG_ZTE_PLATFORM
+	input_set_capability(ipdev, EV_KEY, KEY_SLEEP);
+#else
 	input_set_capability(ipdev, EV_KEY, KEY_END);
+#endif
 
 	rc = input_register_device(ipdev);
 	if (rc) {
@@ -650,6 +818,15 @@ static int __devinit hs_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, hs);
+
+	#if 1
+	proc_hs_type = create_proc_read_entry("hs", S_IRUGO, NULL, hs_read, NULL);
+	if (!proc_hs_type) {
+		printk(KERN_ERR"[YXS]hs: unable to register '/proc/hs' \n");
+	}
+
+	INIT_DELAYED_WORK(&hs->hph_wq, input_report_hph_event);
+	#endif
 
 	rc = hs_rpc_init();
 	if (rc) {
@@ -674,6 +851,10 @@ err_switch_dev_register:
 static int __devexit hs_remove(struct platform_device *pdev)
 {
 	struct msm_handset *hs = platform_get_drvdata(pdev);
+
+	#if 1
+	remove_proc_entry("hs", NULL);
+	#endif
 
 	input_unregister_device(hs->ipdev);
 	switch_dev_unregister(&hs->sdev);

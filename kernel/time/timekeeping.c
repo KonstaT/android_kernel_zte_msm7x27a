@@ -176,6 +176,7 @@ void timekeeping_leap_insert(int leapsecond)
 	wall_to_monotonic.tv_sec -= leapsecond;
 	update_vsyscall(&xtime, &wall_to_monotonic, timekeeper.clock,
 			timekeeper.mult);
+	printk("%s,%d\n",__FUNCTION__,leapsecond);
 }
 
 /**
@@ -381,7 +382,7 @@ int do_settimeofday(const struct timespec *tv)
 
 	/* signal hrtimers about time change */
 	clock_was_set();
-
+	printk("%s,%lu\n",__FUNCTION__,tv->tv_sec);
 	return 0;
 }
 
@@ -418,7 +419,7 @@ int timekeeping_inject_offset(struct timespec *ts)
 
 	/* signal hrtimers about time change */
 	clock_was_set();
-
+	printk("%s, %lu",__FUNCTION__,ts->tv_sec);
 	return 0;
 }
 EXPORT_SYMBOL(timekeeping_inject_offset);
@@ -644,6 +645,7 @@ void timekeeping_inject_sleeptime(struct timespec *delta)
 
 	/* signal hrtimers about time change */
 	clock_was_set();
+	printk("%s,%lu\n",__FUNCTION__,(unsigned long)(delta->tv_sec));
 }
 
 
@@ -681,6 +683,8 @@ static void timekeeping_resume(void)
 
 	/* Resume hrtimers */
 	hrtimers_resume();
+
+	printk("%s,%lu\n",__FUNCTION__,(unsigned long)(ts.tv_sec));
 }
 
 static int timekeeping_suspend(void)
@@ -1022,6 +1026,18 @@ void monotonic_to_bootbased(struct timespec *ts)
 	*ts = timespec_add(*ts, total_sleep_time);
 }
 EXPORT_SYMBOL_GPL(monotonic_to_bootbased);
+
+#ifdef CONFIG_ZTE_PLATFORM
+/**
+ * zte_get_total_suspend -  get the total suspend time.
+ * @ts:		pointer to the timespec to be return
+ */
+void zte_get_total_suspend(struct timespec *ts)
+{
+	*ts =  total_sleep_time;
+}
+EXPORT_SYMBOL_GPL(zte_get_total_suspend);
+#endif
 
 unsigned long get_seconds(void)
 {

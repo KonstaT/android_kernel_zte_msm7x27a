@@ -182,6 +182,10 @@ static void packet_arrival_worker(struct work_struct *work)
 {
 	struct smd_pkt_dev *smd_pkt_devp;
 
+	#ifdef CONFIG_ZTE_PLATFORM
+	return;
+	#endif
+
 	smd_pkt_devp = container_of(work, struct smd_pkt_dev,
 				    packet_arrival_work);
 	mutex_lock(&smd_pkt_devp->ch_lock);
@@ -311,8 +315,7 @@ wait_for_packet:
 
 	mutex_lock(&smd_pkt_devp->ch_lock);
 	spin_lock_irqsave(&smd_pkt_devp->pa_spinlock, flags);
-	if (smd_pkt_devp->poll_mode &&
-	    !smd_cur_packet_size(smd_pkt_devp->ch)) {
+	if (!smd_cur_packet_size(smd_pkt_devp->ch)) {
 		wake_unlock(&smd_pkt_devp->pa_wake_lock);
 		smd_pkt_devp->poll_mode = 0;
 	}

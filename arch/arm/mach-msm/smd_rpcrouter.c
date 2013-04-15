@@ -46,7 +46,7 @@
 #include <mach/msm_smd.h>
 #include <mach/smem_log.h>
 #include <mach/subsystem_notif.h>
-
+#include <linux/hardirq.h>
 #include "smd_rpcrouter.h"
 #include "modem_notifier.h"
 #include "smd_rpc_sym.h"
@@ -947,7 +947,19 @@ static void do_create_pdevs(struct work_struct *work)
 
 static void *rr_malloc(unsigned sz)
 {
-	void *ptr = kmalloc(sz, GFP_KERNEL);
+	void *ptr;
+	if (in_atomic()) {
+		//printk("wly: use GFP_ATOMIC\n");
+		ptr = kmalloc(sz, GFP_ATOMIC);
+		if (ptr)
+			return ptr;
+		printk(KERN_ERR "rpcrouter: kmalloc of %d failed, retrying...\n", sz);
+		do {
+			ptr = kmalloc(sz, GFP_ATOMIC);
+		} while (!ptr);
+	} else {
+		//printk("wly: use GFP_KERNEL\n");
+		ptr = kmalloc(sz, GFP_KERNEL);
 	if (ptr)
 		return ptr;
 
@@ -955,7 +967,7 @@ static void *rr_malloc(unsigned sz)
 	do {
 		ptr = kmalloc(sz, GFP_KERNEL);
 	} while (!ptr);
-
+	}
 	return ptr;
 }
 
@@ -1012,12 +1024,37 @@ static char *type_to_str(int i)
 }
 #endif
 
+int is_in_hibernate(void);
+static int rpc_send_accepted_void_reply(struct msm_rpc_endpoint *client,
+					uint32_t xid, uint32_t accept_status)
+{
+	int rc = 0;
+	uint8_t reply_buf[sizeof(struct rpc_reply_hdr)];
+	struct rpc_reply_hdr *reply = (struct rpc_reply_hdr *)reply_buf;
+
+	reply->xid = cpu_to_be32(xid);
+	reply->type = cpu_to_be32(1); /* reply */
+	reply->reply_stat = cpu_to_be32(RPCMSG_REPLYSTAT_ACCEPTED);
+
+	reply->data.acc_hdr.accept_stat = cpu_to_be32(accept_status);
+	reply->data.acc_hdr.verf_flavor = 0;
+	reply->data.acc_hdr.verf_length = 0;
+
+	rc = msm_rpc_write(client, reply_buf, sizeof(reply_buf));
+	if (rc < 0)
+		printk(KERN_ERR"could not write RPC response: %d\n", rc);
+	return rc;
+}
+static struct msm_rpc_reply *get_avail_reply(struct msm_rpc_endpoint *ept);
+static void set_pend_reply(struct msm_rpc_endpoint *ept,
+			   struct msm_rpc_reply *reply);
 static void do_read_data(struct work_struct *work)
 {
 	struct rr_header hdr;
 	struct rr_packet *pkt;
 	struct rr_fragment *frag;
 	struct msm_rpc_endpoint *ept;
+	struct rpc_request_hdr *req = NULL;
 #if defined(CONFIG_MSM_ONCRPCROUTER_DEBUG)
 	struct rpc_request_hdr *rq;
 #endif
@@ -1177,6 +1214,34 @@ static void do_read_data(struct work_struct *work)
 	}
 
 packet_complete:
+
+	req = (struct rpc_request_hdr *) frag->data;
+	//when system is in hibernate and gps rpc callback will cause reboot, send a void reply
+	if (is_in_hibernate() && (be32_to_cpu(req->prog) == 0x3100008C)) {
+		struct msm_rpc_reply* reply = NULL;
+		spin_unlock_irqrestore(&local_endpoints_lock, flags);
+		reply = get_avail_reply(ept);
+		if (!reply) {
+			kfree(frag);
+			kfree(pkt);
+			goto done;
+		}
+		reply->cid = pkt->hdr.src_cid;
+		reply->pid = pkt->hdr.src_pid;
+		reply->xid = req->xid;
+		reply->prog = req->prog;
+		reply->vers = req->vers;
+		set_pend_reply(ept, reply);
+		rpc_send_accepted_void_reply(
+			ept, be32_to_cpu(req->xid),
+			RPC_ACCEPTSTAT_PROG_UNAVAIL);
+		printk(KERN_ERR"rpc called when hibernate cid 0x%08x 0x%08x\n",
+		       hdr.dst_cid, be32_to_cpu(req->prog));
+		kfree(frag);
+		kfree(pkt);
+		goto done;
+	}
+
 	spin_lock(&ept->read_q_lock);
 	D("%s: take read lock on ept %p\n", __func__, ept);
 	wake_lock(&ept->read_q_wake_lock);
@@ -1351,6 +1416,9 @@ static int msm_rpc_write_pkt(
 	mutex_lock(&xprt_info_list_lock);
 	xprt_info = rpcrouter_get_xprt_info(hdr->dst_pid);
 	if (!xprt_info) {
+#ifdef CONFIG_ZTE_PLATFORM
+		printk(KERN_ERR"xprt_info is NULL\n");
+#endif
 		mutex_unlock(&xprt_info_list_lock);
 		return -ENETRESET;
 	}
@@ -1737,13 +1805,17 @@ int msm_rpc_call_reply(struct msm_rpc_endpoint *ept, uint32_t proc,
 	req->procedure = cpu_to_be32(proc);
 
 	rc = msm_rpc_write(ept, req, request_size);
+	//printk(KERN_ERR"rpc_xbl:%s,%d,rc=%d \n",__FUNCTION__,__LINE__,rc);//ZTE
 	if (rc < 0)
 		return rc;
 
 	for (;;) {
 		rc = msm_rpc_read(ept, (void*) &reply, -1, timeout);
 		if (rc < 0)
+		{
+			printk(KERN_ERR"rpc_xbl:%s,%d,rc=%d \n",__FUNCTION__,__LINE__,rc);//ZTE
 			return rc;
+		}
 		if (rc < (3 * sizeof(uint32_t))) {
 			rc = -EIO;
 			break;
@@ -1763,24 +1835,30 @@ int msm_rpc_call_reply(struct msm_rpc_endpoint *ept, uint32_t proc,
 		}
 		if (reply->reply_stat != 0) {
 			rc = -EPERM;
+			printk(KERN_ERR"rpc_xbl:%s,%d,rc=%d \n",__FUNCTION__,__LINE__,rc);//ZTE
 			break;
 		}
 		if (reply->data.acc_hdr.accept_stat != 0) {
 			rc = -EINVAL;
+			printk(KERN_ERR"rpc_xbl:%s,%d,rc=%d \n",__FUNCTION__,__LINE__,rc);//ZTE
 			break;
 		}
 		if (_reply == NULL) {
 			rc = 0;
+			printk(KERN_ERR"rpc_xbl:%s,%d,rc=%d \n",__FUNCTION__,__LINE__,rc);//ZTE
 			break;
 		}
 		if (rc > reply_size) {
 			rc = -ENOMEM;
+			printk(KERN_ERR"rpc_xbl:%s,%d,rc=%d \n",__FUNCTION__,__LINE__,rc);//ZTE
 		} else {
 			memcpy(_reply, reply, rc);
 		}
 		break;
 	}
 	kfree(reply);
+
+	//printk(KERN_ERR"rpc_xbl:%s,%d,rc=%d \n",__FUNCTION__,__LINE__,rc);//ZTE
 	return rc;
 }
 EXPORT_SYMBOL(msm_rpc_call_reply);
@@ -1795,6 +1873,14 @@ static inline int ept_packet_available(struct msm_rpc_endpoint *ept)
 	spin_unlock_irqrestore(&ept->read_q_lock, flags);
 	return ret;
 }
+
+#ifdef CONFIG_ZTE_PLATFORM
+bool flag_need_2_prink_while_wakeup;
+void zte_need_2_prink_rpc_while_wakeup(void)
+{
+	flag_need_2_prink_while_wakeup = true;
+}
+#endif
 
 int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 		   struct rr_fragment **frag_ret,
@@ -1888,6 +1974,15 @@ int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 		reply->xid = rq->xid;
 		reply->prog = rq->prog;
 		reply->vers = rq->vers;
+
+#ifdef CONFIG_ZTE_PLATFORM
+		if(flag_need_2_prink_while_wakeup)
+		{
+			flag_need_2_prink_while_wakeup = false;
+			pr_info("LHX_RPC %s prog= 0x%08x proc= 0x%08x\n",__func__,be32_to_cpu(rq->prog),be32_to_cpu(rq->procedure));
+		}
+#endif
+
 		set_pend_reply(ept, reply);
 	}
 
