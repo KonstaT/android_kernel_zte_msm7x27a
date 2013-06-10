@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2002,2007-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -191,6 +191,9 @@ void adreno_drawctxt_destroy(struct kgsl_device *device,
 
 	adreno_idle(device, KGSL_TIMEOUT_DEFAULT);
 
+	if (adreno_is_a20x(adreno_dev))
+		kgsl_setstate(device, KGSL_MMUFLAGS_PTUPDATE);
+
 	kgsl_sharedmem_free(&drawctxt->gpustate);
 	kgsl_sharedmem_free(&drawctxt->context_gmem_shadow.gmemshadow);
 
@@ -243,8 +246,13 @@ void adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 	}
 
 	/* already current? */
-	if (adreno_dev->drawctxt_active == drawctxt)
+	if (adreno_dev->drawctxt_active == drawctxt) {
+		if (adreno_dev->gpudev->ctxt_draw_workaround &&
+			adreno_is_a225(adreno_dev))
+				adreno_dev->gpudev->ctxt_draw_workaround(
+					adreno_dev);
 		return;
+	}
 
 	KGSL_CTXT_INFO(device, "from %p to %p flags %d\n",
 			adreno_dev->drawctxt_active, drawctxt, flags);

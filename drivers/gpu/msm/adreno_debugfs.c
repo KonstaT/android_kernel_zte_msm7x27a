@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2008-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2002,2008-2011, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -345,6 +345,8 @@ void adreno_debugfs_init(struct kgsl_device *device)
 			    &kgsl_cff_dump_enable_fops);
 	debugfs_create_u32("wait_timeout", 0644, device->d_debugfs,
 		&adreno_dev->wait_timeout);
+	debugfs_create_u32("ib_check", 0644, device->d_debugfs,
+			   &adreno_dev->ib_check_level);
 
 	/* Create post mortem control files */
 

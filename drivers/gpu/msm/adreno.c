@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2002,2007-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -114,6 +114,7 @@ static struct adreno_device device_3d0 = {
 	.pfp_fw = NULL,
 	.pm4_fw = NULL,
 	.wait_timeout = 10000, /* in milliseconds */
+	.ib_check_level = 0,
 };
 
 
@@ -273,6 +274,12 @@ static void adreno_setstate(struct kgsl_device *device,
 	int sizedwords = 0;
 	unsigned int mh_mmu_invalidate = 0x00000003; /*invalidate all and tc */
 
+	/*
+	 * Fix target freeze issue by adding TLB flush for each submit
+	 * on A20X based targets.
+	 */
+	if (adreno_is_a20x(adreno_dev))
+		flags |= KGSL_MMUFLAGS_TLBFLUSH;
 	/*
 	 * If possible, then set the state via the command stream to avoid
 	 * a CPU idle.  Otherwise, use the default setstate which uses register
@@ -544,7 +551,10 @@ static int adreno_start(struct kgsl_device *device, unsigned int init_ram)
 
 	adreno_regwrite(device, REG_RBBM_SOFT_RESET, 0x00000000);
 
-	adreno_regwrite(device, REG_RBBM_CNTL, 0x00004442);
+	if (adreno_is_a200(adreno_dev))
+		adreno_regwrite(device, REG_RBBM_CNTL, 0x0000FFFF);
+	else
+		adreno_regwrite(device, REG_RBBM_CNTL, 0x00004442);
 
 	if (adreno_is_a225(adreno_dev)) {
 		/* Enable large instruction store for A225 */
@@ -980,7 +990,7 @@ static int adreno_suspend_context(struct kgsl_device *device)
 	return status;
 }
 
-const struct kgsl_memdesc *adreno_find_region(struct kgsl_device *device,
+struct kgsl_memdesc *adreno_find_region(struct kgsl_device *device,
 						unsigned int pt_base,
 						unsigned int gpuaddr,
 						unsigned int size)
@@ -1051,7 +1061,7 @@ const struct kgsl_memdesc *adreno_find_region(struct kgsl_device *device,
 uint8_t *adreno_convertaddr(struct kgsl_device *device, unsigned int pt_base,
 			    unsigned int gpuaddr, unsigned int size)
 {
-	const struct kgsl_memdesc *memdesc;
+	struct kgsl_memdesc *memdesc;
 
 	memdesc = adreno_find_region(device, pt_base, gpuaddr, size);
 

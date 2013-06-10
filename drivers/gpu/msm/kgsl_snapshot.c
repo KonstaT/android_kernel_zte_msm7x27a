@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -286,6 +286,8 @@ int kgsl_device_snapshot(struct kgsl_device *device, int hang)
 	KGSL_DRV_ERR(device, "snapshot created at va %p pa %lx size %d\n",
 			device->snapshot, __pa(device->snapshot),
 			device->snapshot_size);
+	if (hang)
+		sysfs_notify(&device->snapshot_kobj, NULL, "timestamp");
 	return 0;
 }
 EXPORT_SYMBOL(kgsl_device_snapshot);
