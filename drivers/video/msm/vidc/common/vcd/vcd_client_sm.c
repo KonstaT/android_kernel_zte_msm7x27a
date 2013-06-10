@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -96,8 +96,8 @@ static u32 vcd_encode_start_in_open(struct vcd_clnt_ctxt *cctxt)
 		 cctxt->in_buf_pool.validated != cctxt->in_buf_pool.count) ||
 	    cctxt->out_buf_pool.validated !=
 	    cctxt->out_buf_pool.count) {
-		VCD_MSG_ERROR("Buffer pool is not completely setup yet");
-		return VCD_ERR_BAD_STATE;
+		VCD_MSG_HIGH("%s: Buffer pool is not completely setup yet",
+			__func__);
 	}
 
 	rc = vcd_sched_add_client(cctxt);
@@ -342,6 +342,7 @@ static u32 vcd_flush_in_flushing
 static u32 vcd_flush_in_eos(struct vcd_clnt_ctxt *cctxt,
 	u32 mode)
 {
+	u32 rc = VCD_S_SUCCESS;
 	VCD_MSG_LOW("vcd_flush_in_eos:");
 
 	if (mode > VCD_FLUSH_ALL || !mode) {
@@ -351,10 +352,18 @@ static u32 vcd_flush_in_eos(struct vcd_clnt_ctxt *cctxt,
 	}
 
 	VCD_MSG_MED("Flush mode requested %d", mode);
+	if (!(cctxt->status.frame_submitted) &&
+		(!cctxt->decoding)) {
+		rc = vcd_flush_buffers(cctxt, mode);
+		if (!VCD_FAILED(rc)) {
+			VCD_MSG_HIGH("All buffers are flushed");
+			cctxt->status.mask |= (mode & VCD_FLUSH_ALL);
+			vcd_send_flush_done(cctxt, VCD_S_SUCCESS);
+		}
+	} else
+		cctxt->status.mask |= (mode & VCD_FLUSH_ALL);
 
-	cctxt->status.mask |= (mode & VCD_FLUSH_ALL);
-
-	return VCD_S_SUCCESS;
+	return rc;
 }
 
 static u32 vcd_flush_in_invalid(struct vcd_clnt_ctxt *cctxt,
@@ -532,6 +541,12 @@ static u32 vcd_set_property_cmn
 			}
 			break;
 		}
+	case VCD_I_SET_TURBO_CLK:
+	{
+		if (cctxt->sched_clnt_hdl)
+			rc = vcd_set_perf_turbo_level(cctxt);
+		break;
+	}
 	case VCD_I_INTRA_PERIOD:
 	   {
 		  struct vcd_property_i_period *iperiod =

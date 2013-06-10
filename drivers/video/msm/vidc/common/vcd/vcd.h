@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -393,4 +393,9 @@ void vcd_handle_ind_info_output_reconfig
 u32 vcd_req_perf_level(struct vcd_clnt_ctxt *cctxt,
 	struct vcd_property_perf_level *);
 
+u32 vcd_set_num_slices(struct vcd_clnt_ctxt *cctxt);
+
+u32 vcd_update_decoder_perf_level(struct vcd_dev_ctxt *dev_ctxt, u32 perf_lvl);
+
+u32 vcd_set_perf_turbo_level(struct vcd_clnt_ctxt *cctxt);
 #endif

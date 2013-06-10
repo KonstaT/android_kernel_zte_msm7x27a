@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -98,11 +98,14 @@ int mdp4_overlay_writeback_on(struct platform_device *pdev)
 		pipe = writeback_pipe;
 	}
 	ret = panel_next_on(pdev);
+
 	/* MDP_LAYERMIXER_WB_MUX_SEL to use mixer1 axi for mixer2 writeback */
-	data = inpdw(MDP_BASE + 0x100F4);
-	data &= ~0x02; /* clear the mixer1 mux bit */
-	data |= 0x02;
+	if (hdmi_prim_display)
+		data = 0x01;
+	else
+		data = 0x02;
 	outpdw(MDP_BASE + 0x100F4, data);
+
 	MDP_OUTP(MDP_BASE + MDP4_OVERLAYPROC1_BASE + 0x5004,
 		((0x0 & 0xFFF) << 16) | /* 12-bit B */
 			(0x0 & 0xFFF));         /* 12-bit G */
@@ -117,7 +120,6 @@ int mdp4_overlay_writeback_on(struct platform_device *pdev)
 int mdp4_overlay_writeback_off(struct platform_device *pdev)
 {
 	int ret;
-	uint32 data;
 	struct msm_fb_data_type *mfd =
 			(struct msm_fb_data_type *)platform_get_drvdata(pdev);
 	if (mfd && writeback_pipe) {
@@ -129,11 +131,8 @@ int mdp4_overlay_writeback_off(struct platform_device *pdev)
 	}
 	ret = panel_next_off(pdev);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	/* MDP_LAYERMIXER_WB_MUX_SEL to restore
-	 * mixer1 axi for mixer1 writeback */
-	data = inpdw(MDP_BASE + 0x100F4);
-	data &= ~0x02; /* clear the mixer1 mux bit */
-	outpdw(MDP_BASE + 0x100F4, data);
+	/* MDP_LAYERMIXER_WB_MUX_SEL to restore to default cfg*/
+	outpdw(MDP_BASE + 0x100F4, 0x0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	return ret;
 }
@@ -141,6 +140,7 @@ int mdp4_overlay_writeback_update(struct msm_fb_data_type *mfd)
 {
 	struct fb_info *fbi;
 	uint8 *buf;
+	unsigned int buf_offset;
 	struct mdp4_overlay_pipe *pipe;
 	int bpp;
 
@@ -156,7 +156,7 @@ int mdp4_overlay_writeback_update(struct msm_fb_data_type *mfd)
 
 	bpp = fbi->var.bits_per_pixel / 8;
 	buf = (uint8 *) fbi->fix.smem_start;
-	buf += fbi->var.xoffset * bpp +
+	buf_offset = fbi->var.xoffset * bpp +
 		fbi->var.yoffset * fbi->fix.line_length;
 
 	/* MDP cmd block enable */
@@ -173,8 +173,15 @@ int mdp4_overlay_writeback_update(struct msm_fb_data_type *mfd)
 	pipe->src_x = 0;
 	pipe->dst_y = 0;
 	pipe->dst_x = 0;
-	pipe->srcp0_addr = (uint32)buf;
 
+	if (mfd->map_buffer) {
+		pipe->srcp0_addr = (unsigned int)mfd->map_buffer->iova[0] + \
+			buf_offset;
+		pr_debug("start 0x%lx srcp0_addr 0x%x\n", mfd->
+			map_buffer->iova[0], pipe->srcp0_addr);
+	} else {
+		pipe->srcp0_addr = (uint32)(buf + buf_offset);
+	}
 
 	mdp4_mixer_stage_up(pipe);
 
@@ -258,7 +265,9 @@ void mdp4_writeback_kickoff_video(struct msm_fb_data_type *mfd,
 	struct msmfb_writeback_data_list *node = NULL;
 	mutex_lock(&mfd->unregister_mutex);
 	mutex_lock(&mfd->writeback_mutex);
-	if (!list_empty(&mfd->writeback_free_queue)) {
+	if (!list_empty(&mfd->writeback_free_queue)
+		&& mfd->writeback_state != WB_STOPING
+		&& mfd->writeback_state != WB_STOP) {
 		node = list_first_entry(&mfd->writeback_free_queue,
 				struct msmfb_writeback_data_list, active_entry);
 	}
@@ -306,7 +315,9 @@ void mdp4_writeback_overlay(struct msm_fb_data_type *mfd)
 
 	mutex_lock(&mfd->unregister_mutex);
 	mutex_lock(&mfd->writeback_mutex);
-	if (!list_empty(&mfd->writeback_free_queue)) {
+	if (!list_empty(&mfd->writeback_free_queue)
+		&& mfd->writeback_state != WB_STOPING
+		&& mfd->writeback_state != WB_STOP) {
 		node = list_first_entry(&mfd->writeback_free_queue,
 				struct msmfb_writeback_data_list, active_entry);
 	}
@@ -345,6 +356,7 @@ void mdp4_writeback_overlay(struct msm_fb_data_type *mfd)
 		pr_debug("%s: in writeback pan display 0x%x\n", __func__,
 				(unsigned int)writeback_pipe->blt_addr);
 		mdp4_writeback_kickoff_ui(mfd, writeback_pipe);
+		mdp4_iommu_unmap(writeback_pipe);
 
 		/* signal if pan function is waiting for the
 		 * update completion */

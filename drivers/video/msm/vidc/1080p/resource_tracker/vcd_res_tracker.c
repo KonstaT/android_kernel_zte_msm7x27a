@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,8 +28,8 @@
 #define PIL_FW_BASE_ADDR 0xafe00000
 #define PIL_FW_SIZE 0x200000
 
-static unsigned int vidc_clk_table[3] = {
-	48000000, 133330000, 200000000
+static unsigned int vidc_clk_table[4] = {
+	48000000, 133330000, 200000000, 228570000,
 };
 static unsigned int restrk_mmu_subsystem[] =	{
 		MSM_SUBSYSTEM_VIDEO, MSM_SUBSYSTEM_VIDEO_FWARE};
@@ -61,40 +61,97 @@ static void *res_trk_pmem_map
 	u32 index = 0;
 	struct ddl_context *ddl_context;
 	struct msm_mapped_buffer *mapped_buffer = NULL;
-	ddl_context = ddl_get_context();
-	if (!addr->alloced_phys_addr) {
-		pr_err(" %s() alloced addres NULL", __func__);
-		goto bail_out;
-	}
-	flags = MSM_SUBSYSTEM_MAP_IOVA | MSM_SUBSYSTEM_MAP_KADDR;
-	if (alignment == DDL_KILO_BYTE(128))
-			index = 1;
-	else if (alignment > SZ_4K)
-		flags |= MSM_SUBSYSTEM_ALIGN_IOVA_8K;
+	int ret = 0;
+	unsigned long iova = 0;
+	unsigned long buffer_size  = 0;
+	unsigned long *kernel_vaddr = NULL;
 
-	addr->mapped_buffer =
-	msm_subsystem_map_buffer((unsigned long)addr->alloced_phys_addr,
-	sz, flags, &restrk_mmu_subsystem[index],
-	sizeof(restrk_mmu_subsystem[index])/sizeof(unsigned int));
-	if (IS_ERR(addr->mapped_buffer)) {
-		pr_err(" %s() buffer map failed", __func__);
-		goto bail_out;
-	}
-	mapped_buffer = addr->mapped_buffer;
-	if (!mapped_buffer->vaddr || !mapped_buffer->iova[0]) {
-		pr_err("%s() map buffers failed\n", __func__);
-		goto bail_out;
-	}
-	addr->physical_base_addr = (u8 *)mapped_buffer->iova[0];
-	addr->virtual_base_addr = mapped_buffer->vaddr;
-	addr->align_physical_addr = (u8 *) DDL_ALIGN((u32)
+	ddl_context = ddl_get_context();
+	if (res_trk_get_enable_ion() && addr->alloc_handle) {
+		kernel_vaddr = (unsigned long *) ion_map_kernel(
+					ddl_context->video_ion_client,
+					addr->alloc_handle, UNCACHED);
+		if (IS_ERR_OR_NULL(kernel_vaddr)) {
+			DDL_MSG_ERROR("%s():DDL ION client map failed\n",
+						 __func__);
+			goto ion_bail_out;
+		}
+		addr->virtual_base_addr = (u8 *) kernel_vaddr;
+		ret = ion_map_iommu(ddl_context->video_ion_client,
+				addr->alloc_handle,
+				VIDEO_DOMAIN,
+				VIDEO_FIRMWARE_POOL,
+				SZ_4K,
+				0,
+				&iova,
+				&buffer_size,
+				UNCACHED, 0);
+		if (ret) {
+			DDL_MSG_ERROR("%s():DDL ION client iommu map failed\n",
+						 __func__);
+			goto ion_unmap_bail_out;
+		}
+		addr->mapped_buffer = NULL;
+		addr->physical_base_addr = (u8 *)iova;
+		addr->align_physical_addr = (u8 *) DDL_ALIGN((u32)
 		addr->physical_base_addr, alignment);
-	offset = (u32)(addr->align_physical_addr -
-			addr->physical_base_addr);
-	addr->align_virtual_addr = addr->virtual_base_addr + offset;
-	addr->buffer_size = sz;
+		offset = (u32)(addr->align_physical_addr -
+				addr->physical_base_addr);
+		addr->align_virtual_addr = addr->virtual_base_addr + offset;
+		addr->buffer_size = buffer_size;
+	} else {
+		if (!res_trk_check_for_sec_session()) {
+			if (!addr->alloced_phys_addr) {
+				pr_err(" %s() alloced addres NULL", __func__);
+				goto bail_out;
+			}
+			flags = MSM_SUBSYSTEM_MAP_IOVA|MSM_SUBSYSTEM_MAP_KADDR;
+			if (alignment == DDL_KILO_BYTE(128))
+					index = 1;
+			else if (alignment > SZ_4K)
+				flags |= MSM_SUBSYSTEM_ALIGN_IOVA_8K;
+
+			addr->mapped_buffer =
+			msm_subsystem_map_buffer(
+			(unsigned long)addr->alloced_phys_addr,
+			sz, flags, &restrk_mmu_subsystem[index],
+			sizeof(restrk_mmu_subsystem[index])
+			/sizeof(unsigned int));
+			if (IS_ERR(addr->mapped_buffer)) {
+				pr_err(" %s() buffer map failed", __func__);
+				goto bail_out;
+			}
+			mapped_buffer = addr->mapped_buffer;
+			if (!mapped_buffer->vaddr || !mapped_buffer->iova[0]) {
+				pr_err("%s() map buffers failed\n", __func__);
+				goto bail_out;
+			}
+			addr->physical_base_addr = (u8 *)mapped_buffer->iova[0];
+			addr->virtual_base_addr = mapped_buffer->vaddr;
+		} else {
+			addr->physical_base_addr = (u8 *)
+					 addr->alloced_phys_addr;
+			addr->virtual_base_addr = (u8 *)
+					addr->alloced_phys_addr;
+		}
+		addr->align_physical_addr = (u8 *) DDL_ALIGN((u32)
+		addr->physical_base_addr, alignment);
+		offset = (u32)(addr->align_physical_addr -
+				addr->physical_base_addr);
+		addr->align_virtual_addr = addr->virtual_base_addr + offset;
+		addr->buffer_size = sz;
+	}
 	return addr->virtual_base_addr;
 bail_out:
+	if (addr->mapped_buffer)
+		msm_subsystem_unmap_buffer(addr->mapped_buffer);
+	return NULL;
+ion_unmap_bail_out:
+	if (!IS_ERR_OR_NULL(addr->alloc_handle)) {
+		ion_unmap_kernel(resource_context.
+			res_ion_client,	addr->alloc_handle);
+	}
+ion_bail_out:
 	return NULL;
 }
 
@@ -110,17 +167,16 @@ static void res_trk_pmem_free(struct ddl_buf_addr *addr)
 		}
 	}
 }
-static void *res_trk_pmem_alloc
+static int res_trk_pmem_alloc
 	(struct ddl_buf_addr *addr, size_t sz, u32 alignment)
 {
 	u32 alloc_size;
 	struct ddl_context *ddl_context;
-	int rc = -EINVAL;
-	ion_phys_addr_t phyaddr = 0;
-	size_t len = 0;
+	int rc = 0;
 	DBG_PMEM("\n%s() IN: Requested alloc size(%u)", __func__, (u32)sz);
 	if (!addr) {
 		DDL_MSG_ERROR("\n%s() Invalid Parameters", __func__);
+		rc = -EINVAL;
 		goto bail_out;
 	}
 	ddl_context = ddl_get_context();
@@ -133,30 +189,25 @@ static void *res_trk_pmem_alloc
 					res_trk_get_ion_client();
 			if (!ddl_context->video_ion_client) {
 				DDL_MSG_ERROR("%s() :DDL ION Client Invalid handle\n",
-						__func__);
+							 __func__);
+				rc = -ENOMEM;
 				goto bail_out;
 			}
+			alloc_size = (alloc_size+4095) & ~4095;
 			addr->alloc_handle = ion_alloc(
-					ddl_context->video_ion_client, alloc_size, SZ_4K,
-					res_trk_get_mem_type());
+			ddl_context->video_ion_client, alloc_size, SZ_4K,
+				res_trk_get_mem_type());
 			if (IS_ERR_OR_NULL(addr->alloc_handle)) {
 				DDL_MSG_ERROR("%s() :DDL ION alloc failed\n",
-						__func__);
+							 __func__);
+				rc = -ENOMEM;
 				goto bail_out;
 			}
-			rc = ion_phys(ddl_context->video_ion_client,
-					addr->alloc_handle, &phyaddr,
-					&len);
-			if (rc || !phyaddr) {
-				DDL_MSG_ERROR("%s():DDL ION client physical failed\n",
-						__func__);
-				goto free_acm_ion_alloc;
-			}
-			addr->alloced_phys_addr = phyaddr;
 		}
 		else {
 			addr->alloc_handle = NULL;
 			addr->alloced_phys_addr = PIL_FW_BASE_ADDR;
+			addr->buffer_size = sz;
 		}
 	} else {
 		addr->alloced_phys_addr = (phys_addr_t)
@@ -167,15 +218,11 @@ static void *res_trk_pmem_alloc
 					__func__, alloc_size);
 			goto bail_out;
 		}
+		addr->buffer_size = sz;
+		return rc;
 	}
-
-	addr->buffer_size = sz;
-	return (void *)addr->alloced_phys_addr;
-
-free_acm_ion_alloc:
-	res_trk_pmem_free(addr);
 bail_out:
-	return NULL;
+	return rc;
 }
 
 static void res_trk_pmem_unmap(struct ddl_buf_addr *addr)
@@ -184,7 +231,20 @@ static void res_trk_pmem_unmap(struct ddl_buf_addr *addr)
 		pr_err("%s() invalid args\n", __func__);
 		return;
 	}
-	if (addr->mapped_buffer)
+	if (!IS_ERR_OR_NULL(addr->alloc_handle)) {
+		if (addr->physical_base_addr) {
+			ion_unmap_kernel(resource_context.res_ion_client,
+					addr->alloc_handle);
+			if (!res_trk_check_for_sec_session()) {
+				ion_unmap_iommu(resource_context.res_ion_client,
+				addr->alloc_handle,
+				VIDEO_DOMAIN,
+				VIDEO_FIRMWARE_POOL);
+			}
+			addr->virtual_base_addr = NULL;
+			addr->physical_base_addr = NULL;
+		}
+	} else if (addr->mapped_buffer)
 		msm_subsystem_unmap_buffer(addr->mapped_buffer);
 	addr->mapped_buffer = NULL;
 }
@@ -310,7 +370,7 @@ static u32 res_trk_sel_clk_rate(unsigned long hclk_rate)
 	return status;
 }
 
-static u32 res_trk_get_clk_rate(unsigned long *phclk_rate)
+u32 res_trk_get_clk_rate(unsigned long *phclk_rate)
 {
 	u32 status = true;
 	mutex_lock(&resource_context.lock);
@@ -460,6 +520,9 @@ int res_trk_update_bus_perf_level(struct vcd_dev_ctxt *dev_ctxt, u32 perf_level)
 	u32 enc_perf_level = 0, dec_perf_level = 0;
 	u32 bus_clk_index, client_type = 0;
 	int rc = 0;
+	bool turbo_enabled = false;
+	bool turbo_supported =
+		!resource_context.vidc_platform_data->disable_turbo;
 
 	cctxt_itr = dev_ctxt->cctxt_list_head;
 	while (cctxt_itr) {
@@ -467,19 +530,37 @@ int res_trk_update_bus_perf_level(struct vcd_dev_ctxt *dev_ctxt, u32 perf_level)
 			dec_perf_level += cctxt_itr->reqd_perf_lvl;
 		else
 			enc_perf_level += cctxt_itr->reqd_perf_lvl;
+
+		if (cctxt_itr->is_turbo_enabled)
+			turbo_enabled = true;
 		cctxt_itr = cctxt_itr->next;
 	}
+
 	if (!enc_perf_level)
 		client_type = 1;
 	if (perf_level <= RESTRK_1080P_VGA_PERF_LEVEL)
 		bus_clk_index = 0;
 	else if (perf_level <= RESTRK_1080P_720P_PERF_LEVEL)
 		bus_clk_index = 1;
-	else
+	else if (perf_level <= RESTRK_1080P_MAX_PERF_LEVEL)
 		bus_clk_index = 2;
+	else
+		bus_clk_index = 3;
 
 	if (dev_ctxt->reqd_perf_lvl + dev_ctxt->curr_perf_lvl == 0)
 		bus_clk_index = 2;
+	else if ((!turbo_supported || !turbo_enabled) && bus_clk_index == 3) {
+		if (!turbo_supported)
+			VCDRES_MSG_MED("Warning: Turbo mode not supported "\
+					" falling back to 1080p bus\n");
+		bus_clk_index = 2;
+	}
+
+	if (bus_clk_index == 3)
+		dev_ctxt->turbo_mode_set = true;
+	else
+		dev_ctxt->turbo_mode_set = false;
+
 	bus_clk_index = (bus_clk_index << 1) + (client_type + 1);
 	VCDRES_MSG_LOW("%s(), bus_clk_index = %d", __func__, bus_clk_index);
 	VCDRES_MSG_LOW("%s(),context.pcl = %x", __func__, resource_context.pcl);
@@ -494,12 +575,22 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 	struct vcd_dev_ctxt *dev_ctxt)
 {
 	u32 vidc_freq = 0;
+	bool turbo_supported =
+		!resource_context.vidc_platform_data->disable_turbo;
+
 	if (!pn_set_perf_lvl || !dev_ctxt) {
 		VCDRES_MSG_ERROR("%s(): NULL pointer! dev_ctxt(%p)\n",
 			__func__, dev_ctxt);
 		return false;
 	}
+
 	VCDRES_MSG_LOW("%s(), req_perf_lvl = %d", __func__, req_perf_lvl);
+
+	if (!turbo_supported && req_perf_lvl > RESTRK_1080P_MAX_PERF_LEVEL) {
+		VCDRES_MSG_ERROR("%s(): Turbo not supported! dev_ctxt(%p)\n",
+			__func__, dev_ctxt);
+	}
+
 #ifdef CONFIG_MSM_BUS_SCALING
 	if (!res_trk_update_bus_perf_level(dev_ctxt, req_perf_lvl) < 0) {
 		VCDRES_MSG_ERROR("%s(): update buf perf level failed\n",
@@ -517,10 +608,23 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 	} else if (req_perf_lvl <= RESTRK_1080P_720P_PERF_LEVEL) {
 		vidc_freq = vidc_clk_table[1];
 		*pn_set_perf_lvl = RESTRK_1080P_720P_PERF_LEVEL;
+	} else if (req_perf_lvl <= RESTRK_1080P_MAX_PERF_LEVEL) {
+		vidc_freq = vidc_clk_table[2];
+		*pn_set_perf_lvl = RESTRK_1080P_MAX_PERF_LEVEL;
 	} else {
+		vidc_freq = vidc_clk_table[3];
+		*pn_set_perf_lvl = RESTRK_1080P_TURBO_PERF_LEVEL;
+	}
+
+	if ((!turbo_supported || !dev_ctxt->turbo_mode_set) &&
+		 *pn_set_perf_lvl == RESTRK_1080P_TURBO_PERF_LEVEL) {
+		if (!turbo_supported)
+			VCDRES_MSG_ERROR("Warning: Turbo mode not supported "\
+					" falling back to 1080p clocks\n");
 		vidc_freq = vidc_clk_table[2];
 		*pn_set_perf_lvl = RESTRK_1080P_MAX_PERF_LEVEL;
 	}
+
 	resource_context.perf_level = *pn_set_perf_lvl;
 	VCDRES_MSG_MED("VIDC: vidc_freq = %u, req_perf_lvl = %u\n",
 		vidc_freq, req_perf_lvl);
@@ -655,7 +759,7 @@ u32 res_trk_get_firmware_addr(struct ddl_buf_addr *firm_addr)
 	else
 		size = VIDC_FW_SIZE;
 
-	if (!res_trk_pmem_alloc(&resource_context.firmware_addr,
+	if (res_trk_pmem_alloc(&resource_context.firmware_addr,
 				size, DDL_KILO_BYTE(128))) {
 		pr_err("%s() Firmware buffer allocation failed",
 				__func__);
@@ -701,8 +805,8 @@ int res_trk_get_mem_type(void)
 	int mem_type = -1;
 	switch (resource_context.res_mem_type) {
 	case DDL_FW_MEM:
-		mem_type = resource_context.fw_mem_type;
-		break;
+		mem_type = ION_HEAP(resource_context.fw_mem_type);
+		return mem_type;
 	case DDL_MM_MEM:
 		mem_type = resource_context.memtype;
 		break;
@@ -724,7 +828,8 @@ int res_trk_get_mem_type(void)
             mem_type |= ION_SECURE;
       }
 		else
-			mem_type = ION_HEAP(mem_type);
+			mem_type = (ION_HEAP(mem_type) |
+					ION_HEAP(ION_IOMMU_HEAP_ID));
 	}
 	return mem_type;
 }
@@ -752,6 +857,10 @@ struct ion_client *res_trk_get_ion_client(void)
 
 u32 res_trk_get_disable_dmx(void){
 	return resource_context.disable_dmx;
+}
+
+u32 res_trk_get_min_dpb_count(void){
+	return resource_context.vidc_platform_data->cont_mode_dpb_count;
 }
 
 void res_trk_set_mem_type(enum ddl_mem_area mem_type)
@@ -890,9 +999,26 @@ u32 get_res_trk_perf_level(enum vcd_perf_level perf_level)
 	case VCD_PERF_LEVEL2:
 		res_trk_perf_level = RESTRK_1080P_MAX_PERF_LEVEL;
 		break;
+	case VCD_PERF_LEVEL_TURBO:
+		res_trk_perf_level = RESTRK_1080P_TURBO_PERF_LEVEL;
+		break;
 	default:
 		VCD_MSG_ERROR("Invalid perf level: %d\n", perf_level);
 		res_trk_perf_level = -EINVAL;
 	}
 	return res_trk_perf_level;
+}
+
+u32 res_trk_estimate_perf_level(u32 pn_perf_lvl)
+{
+	VCDRES_MSG_MED("%s(), req_perf_lvl = %d", __func__, pn_perf_lvl);
+	if ((pn_perf_lvl >= RESTRK_1080P_VGA_PERF_LEVEL) &&
+		(pn_perf_lvl < RESTRK_1080P_720P_PERF_LEVEL)) {
+		return RESTRK_1080P_720P_PERF_LEVEL;
+	} else if ((pn_perf_lvl >= RESTRK_1080P_720P_PERF_LEVEL) &&
+			(pn_perf_lvl < RESTRK_1080P_MAX_PERF_LEVEL)) {
+		return RESTRK_1080P_MAX_PERF_LEVEL;
+	} else {
+		return pn_perf_lvl;
+	}
 }

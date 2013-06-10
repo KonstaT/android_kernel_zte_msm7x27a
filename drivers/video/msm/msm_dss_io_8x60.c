@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -515,7 +515,6 @@ void hdmi_phy_reset(void)
 
 void hdmi_msm_reset_core(void)
 {
-	hdmi_msm_set_mode(FALSE);
 	hdmi_msm_clk(0);
 	udelay(5);
 	hdmi_msm_clk(1);
