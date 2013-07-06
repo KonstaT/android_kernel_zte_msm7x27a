@@ -1,6 +1,6 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2010-2012 Code Aurora Forum.  All rights reserved.
+   Copyright (c) 2000-2001, 2010-2012 The Linux Foundation.  All rights reserved.
    Copyright (C) 2009-2010 Gustavo F. Padovan <gustavo@padovan.org>
    Copyright (C) 2010 Google Inc.
 
@@ -534,6 +534,7 @@ struct l2cap_pinfo {
 
 	__u16		tx_win;
 	__u16		tx_win_max;
+	__u16		ack_win;
 	__u8		max_tx;
 	__u8		amp_pref;
 	__u16		remote_tx_win;
@@ -653,13 +654,14 @@ struct l2cap_pinfo {
 #define L2CAP_ATT_MTU_RSP			0x03
 #define L2CAP_ATT_RESPONSE_BIT			0x01
 #define L2CAP_ATT_INDICATE			0x1D
+#define L2CAP_ATT_CONFIRM			0x1E
 #define L2CAP_ATT_NOT_SUPPORTED			0x06
 
 #define __delta_seq(x, y, pi) ((x) >= (y) ? (x) - (y) : \
 				(pi)->tx_win_max + 1 - (y) + (x))
 #define __next_seq(x, pi) ((x + 1) & ((pi)->tx_win_max))
 
-extern int disable_ertm;
+extern bool disable_ertm;
 extern const struct proto_ops l2cap_sock_ops;
 extern struct bt_sock_list l2cap_sk_list;
 
@@ -685,6 +687,7 @@ int l2cap_strm_tx(struct sock *sk, struct sk_buff_head *skbs);
 int l2cap_ertm_tx(struct sock *sk, struct bt_l2cap_control *control,
 			struct sk_buff_head *skbs, u8 event);
 
+int l2cap_sock_le_params_valid(struct bt_le_params *le_params);
 void l2cap_sock_set_timer(struct sock *sk, long timeout);
 void l2cap_sock_clear_timer(struct sock *sk);
 void __l2cap_sock_close(struct sock *sk, int reason);

@@ -1,6 +1,7 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2010-2012, Code Aurora Forum. All rights reserved.
+   Copyright (c) 2000-2001, The Linux Foundation. All rights reserved.
+   Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -26,7 +27,6 @@
 #define __HCI_CORE_H
 
 #include <net/bluetooth/hci.h>
-
 /* HCI upper protocols */
 #define HCI_PROTO_L2CAP	0
 #define HCI_PROTO_SCO	1
@@ -191,6 +191,7 @@ struct hci_dev {
 	unsigned int	acl_pkts;
 	unsigned int	sco_pkts;
 	unsigned int	le_pkts;
+	unsigned int	le_white_list_size;
 
 	unsigned int	data_block_len;
 
@@ -304,6 +305,7 @@ struct hci_conn {
 	__u8		auth_initiator;
 	__u8		power_save;
 	__u16		disc_timeout;
+	__u16		conn_timeout;
 	unsigned long	pend;
 
 	__u8		remote_cap;
@@ -321,10 +323,10 @@ struct hci_conn {
 	struct timer_list disc_timer;
 	struct timer_list idle_timer;
 	struct delayed_work	rssi_update_work;
+	struct timer_list encrypt_pause_timer;
 
 	struct work_struct work_add;
 	struct work_struct work_del;
-
 	struct device	dev;
 	atomic_t	devref;
 
@@ -352,6 +354,8 @@ struct hci_conn {
 	__u8		auth;
 	void		*smp_conn;
 	struct timer_list smp_timer;
+	__u8		conn_valid;
+	__u8		hidp_session_valid;
 
 
 	void (*connect_cfm_cb)	(struct hci_conn *conn, u8 status);
@@ -379,7 +383,7 @@ extern rwlock_t hci_cb_list_lock;
 
 /* ----- Inquiry cache ----- */
 #define INQUIRY_CACHE_AGE_MAX   (HZ*30)   /* 30 seconds */
-#define INQUIRY_ENTRY_AGE_MAX   (HZ*60)   /* 60 seconds */
+#define INQUIRY_ENTRY_AGE_MAX   (HZ*60*60)   /* 1 Hour */
 
 #define inquiry_cache_lock(c)		spin_lock(&c->lock)
 #define inquiry_cache_unlock(c)		spin_unlock(&c->lock)
@@ -596,6 +600,13 @@ void hci_chan_modify(struct hci_chan *chan,
 struct hci_conn *hci_connect(struct hci_dev *hdev, int type,
 					__u16 pkt_type, bdaddr_t *dst,
 					__u8 sec_level, __u8 auth_type);
+struct hci_conn *hci_le_connect(struct hci_dev *hdev, __u16 pkt_type,
+					bdaddr_t *dst, __u8 sec_level,
+					__u8 auth_type,
+					struct bt_le_params *le_params);
+void hci_le_add_dev_white_list(struct hci_dev *hdev, bdaddr_t *dst);
+void hci_le_remove_dev_white_list(struct hci_dev *hdev, bdaddr_t *dst);
+void hci_le_cancel_create_connect(struct hci_dev *hdev, bdaddr_t *dst);
 int hci_conn_check_link_mode(struct hci_conn *conn);
 int hci_conn_security(struct hci_conn *conn, __u8 sec_level, __u8 auth_type);
 int hci_conn_change_link_key(struct hci_conn *conn);
@@ -1027,7 +1038,9 @@ int mgmt_discoverable(u16 index, u8 discoverable);
 int mgmt_connectable(u16 index, u8 connectable);
 int mgmt_new_key(u16 index, struct link_key *key, u8 bonded);
 int mgmt_connected(u16 index, bdaddr_t *bdaddr, u8 le);
-int mgmt_disconnected(u16 index, bdaddr_t *bdaddr);
+int mgmt_le_conn_params(u16 index, bdaddr_t *bdaddr, u16 interval,
+						u16 latency, u16 timeout);
+int mgmt_disconnected(u16 index, bdaddr_t *bdaddr, u8 reason);
 int mgmt_disconnect_failed(u16 index);
 int mgmt_connect_failed(u16 index, bdaddr_t *bdaddr, u8 status);
 int mgmt_pin_code_request(u16 index, bdaddr_t *bdaddr);

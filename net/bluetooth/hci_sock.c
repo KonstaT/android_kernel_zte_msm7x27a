@@ -1,6 +1,6 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2011, Code Aurora Forum. All rights reserved.
+   Copyright (c) 2000-2001, 2011, The Linux Foundation. All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -49,7 +49,7 @@
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 
-static int enable_mgmt = 1;
+static bool enable_mgmt = 1;
 
 /* ----- HCI socket interface ----- */
 
