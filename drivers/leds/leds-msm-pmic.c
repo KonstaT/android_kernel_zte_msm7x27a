@@ -133,22 +133,22 @@ static void pmic_leds_timer(unsigned long arg)
 				schedule_work(&b_led->work_led_off);
 			b_led->blink_led_flag = 0;
 			mod_timer(&b_led->timer,jiffies + msecs_to_jiffies(b_led->blink_off_time));
-			}
-			else
-			{
-				if(led_not_suspend_flag)
-					schedule_work(&b_led->work_led_on);
-				b_led->blink_led_flag = 1;
-				mod_timer(&b_led->timer,jiffies + msecs_to_jiffies(b_led->blink_on_time));
-			}
 		}
 		else
 		{
-			if(b_led->led.brightness)
+			if(led_not_suspend_flag)
 				schedule_work(&b_led->work_led_on);
-			else
-				schedule_work(&b_led->work_led_off);
+			b_led->blink_led_flag = 1;
+			mod_timer(&b_led->timer,jiffies + msecs_to_jiffies(b_led->blink_on_time));
 		}
+	}
+	else
+	{
+		if(b_led->led.brightness)
+			schedule_work(&b_led->work_led_on);
+		else
+			schedule_work(&b_led->work_led_off);
+	}
 }
 
 static ssize_t led_blink_solid_show(struct device *dev,
@@ -353,13 +353,13 @@ static int msm_pmic_led_probe(struct platform_device *pdev)
 		}
 	}
 
-	if((gpio_direction_output(GPIO_RED_LIGHT_CTRL, 0))<0)  //turn  off red
+	if((gpio_direction_output(GPIO_RED_LIGHT_CTRL, 0))<0)  //turn off red
 	{
 		printk(KERN_ERR "gpio_direction_output: %d failed!\n", GPIO_RED_LIGHT_CTRL);
       		return -EIO;
 	}
 
-	if((gpio_direction_output(GPIO_GREEN_LIGHT_CTRL, 0))<0)  //turn  off  green
+	if((gpio_direction_output(GPIO_GREEN_LIGHT_CTRL, 0))<0)  //turn off green
 	{
 		printk(KERN_ERR "gpio_direction_output: %d failed!\n", GPIO_GREEN_LIGHT_CTRL);
 		return -EIO;
@@ -431,26 +431,26 @@ static int msm_pmic_led_probe(struct platform_device *pdev)
 
 	return 0;
 
-	err_out_attr_grpfreq:
+err_out_attr_grpfreq:
 	for (j = 0; j < i; j++)
 		device_remove_file(STATUS_LED->blink_led[i].led.dev, &dev_attr_blink);
 	i = 2;
 
-	err_out_attr_grppwm:
+err_out_attr_grppwm:
 	for (j = 0; j < i; j++)
 		device_remove_file(STATUS_LED->blink_led[i].led.dev, &dev_attr_blink);
 	i = 2;
 
-	err_out_attr_blink:
+err_out_attr_blink:
 	for (j = 0; j < i; j++)
 		device_remove_file(STATUS_LED->blink_led[i].led.dev, &dev_attr_blink);
 	i = 2;
 
-	err_led_classdev_register_failed:
+err_led_classdev_register_failed:
 	for (j = 0; j < i; j++)
 		led_classdev_unregister(&STATUS_LED->blink_led[i].led);
 
-	err_alloc_failed:
+err_alloc_failed:
 	kfree(STATUS_LED);
 
 	return ret;
@@ -505,7 +505,8 @@ int msm_pmic_led_config_while_app2sleep(unsigned blink_kbd,unsigned blink_lcd, i
 	}
 
 	if(config_last != 0){  //chenchongbao.20120113 optimize
-		pr_info(ZHY_BL_TAG"green %d,green_blink %d,red %d,red_blink %d;set(2:dis;3:enable):%d\n",blink_lcd,blink_lcd_flag,blink_kbd,blink_kbd_flag,set);
+		pr_info(ZHY_BL_TAG"green %d,green_blink %d,red %d,red_blink %d;set(2:dis;3:enable):%d\n",
+				blink_lcd,blink_lcd_flag,blink_kbd,blink_kbd_flag,set);
 		ret = msm_proc_comm(PCOM_CUSTOMER_CMD3, &config_last, &set);
 	}
 
@@ -519,11 +520,11 @@ static int msm_pmic_led_suspend(struct platform_device *dev,
 {
 	led_not_suspend_flag = 0;  //ccb add
 
-	#ifdef CONFIG_ZTE_NLED_BLINK_WHILE_APP_SUSPEND
+#ifdef CONFIG_ZTE_NLED_BLINK_WHILE_APP_SUSPEND
 	msm_pmic_led_config_while_app2sleep( STATUS_LED->blink_led[0].led.brightness,
 			STATUS_LED->blink_led[1].led.brightness, STATUS_LED->blink_led[0].blink_flag,
 			STATUS_LED->blink_led[1].blink_flag, ZTE_PROC_COMM_CMD3_NLED_BLINK_ENABLE);
-	#endif
+#endif
 
 	return 0;
 }
