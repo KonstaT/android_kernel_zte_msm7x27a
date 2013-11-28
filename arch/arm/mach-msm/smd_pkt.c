@@ -285,8 +285,8 @@ wait_for_packet:
 
 	if (pkt_size > count) {
 		pr_err("packet size %i > buffer size %i,", pkt_size, count);
-		mutex_unlock(&smd_pkt_devp->rx_lock);
-		return -ETOOSMALL;
+		//mutex_unlock(&smd_pkt_devp->rx_lock);
+		//return -ETOOSMALL;
 	}
 
 	bytes_read = 0;
