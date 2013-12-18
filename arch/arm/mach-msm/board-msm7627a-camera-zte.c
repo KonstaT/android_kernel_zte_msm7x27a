@@ -657,7 +657,7 @@ static struct platform_device msm_camera_sensor_ov7692 = {
 
 #ifdef CONFIG_OV7692
 static struct msm_camera_sensor_platform_info ov7692_sensor_7627a_info = {
-	.mount_angle = 180
+	.mount_angle = 0
 };
 
 static struct msm_camera_sensor_flash_data flash_ov7692 = {
